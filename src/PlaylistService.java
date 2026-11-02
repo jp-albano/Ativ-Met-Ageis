@@ -10,14 +10,8 @@ import java.util.Optional;
  * O LinkedHashMap mantém as playlists na ordem em que foram criadas.
  */
 public class PlaylistService {
-    private final Map<Integer, Playlist> playlists = new LinkedHashMap<>();
 
-     private int proximoId = 1;
-
-    
-    public Playlist criar(String nome){
-
-    // A chave e o ID da Playlist usam int, evitando a incompatibilidade de tipos anterior.
+    // A chave e o ID da Playlist usam int, evitando incompatibilidade de tipos.
     private final Map<Integer, Playlist> playlists = new LinkedHashMap<>();
     private int proximoId = 1;
 
@@ -36,9 +30,6 @@ public class PlaylistService {
         // O ID é incrementado somente durante a criação de uma nova playlist.
         Playlist nova = new Playlist(proximoId++, nome.strip());
         playlists.put(nova.getId(), nova);
-        int id = proximoId++;
-        Playlist nova = new Playlist(String.valueOf(id), nome.strip());
-        playlists.put(id, nova);
         return nova;
     }
 
@@ -55,6 +46,22 @@ public class PlaylistService {
     public Optional<Playlist> buscarPorId(int id) {
         return Optional.ofNullable(playlists.get(id));
     }
+
+    /**
+     * Remove a playlist com o ID informado.
+     *
+     * @return true quando uma playlist foi removida
+     */
+    public boolean remover(int id) {
+        return playlists.remove(id) != null;
+    }
+
+    /** Remove a faixa de todas as playlists; usado quando ela sai do catálogo. */
+    public void removerFaixaDeTodas(String faixaId) {
+        playlists.values().forEach(p -> p.removerFaixa(faixaId));
+    }
+
+    /** Monta a tabela de playlists exibida pela área de playlists do terminal. */
     public String formatarListagem() {
         List<Playlist> todas = listar();
         if (todas.isEmpty()) {
@@ -74,10 +81,10 @@ public class PlaylistService {
         return saida.toString();
     }
 
-    public Optional<Playlist> buscarPorId(int id) {
-        return Optional.ofNullable(playlists.get(id));
-    }
-
+    /**
+     * Monta a descrição de uma playlist com os dados das faixas encontradas no catálogo.
+     * IDs que não existem mais no catálogo são exibidos como não encontrados.
+     */
     public String formatarConsulta(int id, CatalogService catalogo) {
         Objects.requireNonNull(catalogo, "catalogo");
 
