@@ -4,10 +4,10 @@ Este diretório reúne decisões técnicas relevantes do projeto por meio de Arc
 
 ## Estado atual
 
-**Aplicativo acadêmico de terminal:** Java, conforme ADR-0001.  
-**Frontend web:** Next.js + React em `frontend/`, consumindo a API Java (ADR-0002).  
-**Backend web:** API HTTP em Java com o servidor embutido do JDK, conforme ADR-0002. Backend congelado após essa decisão.  
-**Banco de dados/persistência:** PENDENTE (estado em memória).  
+**Aplicativo acadêmico de terminal:** Java, conforme ADR-0001.\
+**Frontend web:** Next.js + React em `frontend/`, consumindo a API Java (ADR-0002).\
+**Backend web:** API HTTP em Java com o servidor embutido do JDK, conforme ADR-0002. Backend congelado após essa decisão.\
+**Banco de dados/persistência:** PENDENTE (estado em memória).\
 **Contratos de integração:** [`docs/API.md`](../../API.md).
 
 A implementação dos Cards 4 e 5 pode prosseguir dentro do escopo aprovado em ADR-0001. Mudanças transversais de arquitetura, como migração de pacotes, introdução de framework web ou configuração de banco, continuam exigindo decisão registrada antes da implementação.
