@@ -1,10 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { api, type CatalogTrack, type DiscoveryTrack as Track, type Verification } from "@/lib/api";
 
-type Track = { id: string; title: string; artist: string; artworkUrl: string | null; permalinkUrl: string | null; durationMillis: number };
-type Lyrics = { title: string; artist: string; album: string | null; duration: number; verified: boolean; matchType: string; plainLyrics: string | null; syncedLyrics: string | null; instrumental: boolean; source: string };
-type Verification = { lyrics: Lyrics | null; recordings: Array<{ id: string; title: string; artist: string; length: number | null }>; warnings: string[] };
+const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 const duration = (ms: number) => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -20,31 +19,43 @@ export default function Home() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
   const [showLyrics, setShowLyrics] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogTrack[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+
+  // Carrega o catálogo do backend Java uma vez; se a API estiver fora, mostra o aviso na seção.
+  useEffect(() => {
+    api.listTracks().then(setCatalog).catch(e => setCatalogError(errorMessage(e, "Falha ao carregar o catálogo.")));
+  }, []);
+
+  async function toggleFavorite(track: CatalogTrack) {
+    try {
+      await api.setFavorite(track.id, !track.favorite);
+      setCatalog(current => current.map(t => (t.id === track.id ? { ...t, favorite: !track.favorite } : t)));
+      setCatalogError("");
+    } catch (e) {
+      setCatalogError(errorMessage(e, "Não foi possível atualizar o favorito."));
+    }
+  }
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim()) return;
     setSearching(true); setError(""); setTracks([]); setSelected(null); setVerification(null); setShowLyrics(false);
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Não foi possível pesquisar agora.");
-      setTracks(data.tracks ?? []);
-      if (!data.tracks?.length) setError("Nenhuma faixa encontrada. Tente outro título ou artista.");
+      const found = await api.searchDiscovery(query.trim());
+      setTracks(found);
+      if (!found.length) setError("Nenhuma faixa encontrada. Tente outro título ou artista.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha inesperada na busca.");
+      setError(errorMessage(e, "Falha inesperada na busca."));
     } finally { setSearching(false); }
   }
 
   async function verify(track: Track) {
     setSelected(track); setVerification(null); setError(""); setShowLyrics(false); setVerifying(true);
     try {
-      const response = await fetch(`/api/verify?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}&duration=${Math.round(track.durationMillis / 1000)}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Não foi possível verificar a faixa.");
-      setVerification(data);
+      setVerification(await api.verifyTrack(track.title, track.artist, track.durationMillis / 1000));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao verificar a faixa.");
+      setError(errorMessage(e, "Falha ao verificar a faixa."));
     } finally { setVerifying(false); }
   }
 
@@ -55,6 +66,7 @@ export default function Home() {
         <div className="side-label">SUA BIBLIOTECA</div>
         <a className="side-link active" href="#discover"><span className="side-icon">⌕</span> Descobrir música</a>
         <a className="side-link" href="#results"><span className="side-icon">♫</span> Pesquisas recentes</a>
+        <a className="side-link" href="#catalog"><span className="side-icon">♥</span> Sua biblioteca</a>
         <div className="sidebar-bottom"><div className="equalizer"><i /><i /><i /><i /><i /><i /><i /></div><p>Encontre a música.<br /><strong>Descubra a história.</strong></p><span>Pesquisa musical • projeto acadêmico</span></div>
       </aside>
 
@@ -72,7 +84,7 @@ export default function Home() {
         <section className="results-section" id="results" aria-busy={searching}>
           <div className="section-heading"><div><span className="section-kicker">EXPLORE O CATÁLOGO</span><h2>{tracks.length ? "Resultados da busca" : "Comece por uma descoberta"}</h2></div>{tracks.length > 0 && <span className="result-count">{tracks.length} FAIXAS</span>}</div>
           {searching ? <div className="loading-line" role="status" aria-live="polite"><span className="spinner dark" /> Buscando faixas no SoundCloud…</div> : tracks.length === 0 ? <div className="empty-state"><div className="empty-icon"><span>♫</span><span>✳</span></div><h3>Seu próximo som está por aqui.</h3><p>Pesquise acima para ver faixas do SoundCloud, suas capas e os dados de cada artista.</p><div className="suggestions"><button onClick={() => setQuery("indie pop")}>indie pop <span>↗</span></button><button onClick={() => setQuery("lofi beats")}>lofi beats <span>↗</span></button><button onClick={() => setQuery("rock brasileiro")}>rock brasileiro <span>↗</span></button></div></div> :
-            <div className="track-grid">{tracks.map((track, index) => <article className={selected?.id === track.id ? "track-card selected" : "track-card"} key={track.id}><button className="cover-button" onClick={() => verify(track)} aria-label={`Verificar ${track.title}`}>{track.artworkUrl ? <img src={track.artworkUrl} alt={`Capa de ${track.title}`} /> : <span className="cover-placeholder">♫</span>}<span className="play-overlay">⌕</span><span className="track-index">{String(index + 1).padStart(2, "0")}</span></button><button className="track-title" onClick={() => verify(track)}>{track.title}</button><p className="track-artist">{track.artist}</p><div className="track-meta"><span>{duration(track.durationMillis)}</span><a href={track.permalinkUrl ?? "#"} target="_blank" rel="noreferrer">Abrir faixa ↗</a></div></article>)}</div>}
+            <div className="track-grid">{tracks.map((track, index) => <article className={selected?.id === track.id ? "track-card selected" : "track-card"} key={track.id}><button className="cover-button" onClick={() => verify(track)} aria-label={`Verificar ${track.title}`}>{track.artworkUrl ? <img src={track.artworkUrl} alt={`Capa de ${track.title}`} /> : <span className="cover-placeholder">♫</span>}<span className="play-overlay">⌕</span><span className="track-index">{String(index + 1).padStart(2, "0")}</span></button><button className="track-title" onClick={() => verify(track)}>{track.title}</button><p className="track-artist">{track.artist}</p><div className="track-meta"><span>{duration(track.durationMillis)}</span><a href={track.permalinkUrl} target="_blank" rel="noreferrer">Abrir faixa ↗</a></div></article>)}</div>}
         </section>
 
         {selected && <section className="verification-panel"><div className="verify-header"><div><span className="section-kicker">CONFERÊNCIA MUSICAL</span><h2>{selected.title}</h2><p>{selected.artist}</p></div><button className="close-button" onClick={() => {setSelected(null); setVerification(null);}}>×</button></div>
@@ -81,6 +93,12 @@ export default function Home() {
           {verification.lyrics && <div className="lyrics-block"><div className="lyrics-title"><div><span className="section-kicker">FONTE: LRCLIB</span><h3>{verification.lyrics.title} — {verification.lyrics.artist}</h3></div>{(verification.lyrics.plainLyrics || verification.lyrics.syncedLyrics) && <button onClick={() => setShowLyrics(!showLyrics)}>{showLyrics ? "Ocultar letra" : "Ver letra"} {showLyrics ? "−" : "+"}</button>}</div>{showLyrics && <pre className="lyrics-text">{verification.lyrics.plainLyrics ?? verification.lyrics.syncedLyrics}</pre>}{verification.lyrics.instrumental && <p className="track-artist">Esta faixa está marcada como instrumental pela fonte.</p>}</div>}
           {verification.recordings.length > 0 && <div className="recordings-list"><h3>Registros relacionados</h3>{verification.recordings.map(record => <div className="recording-row" key={record.id}><span>{record.title}</span><span>{record.artist}</span></div>)}</div>}<p className="legal-note">A correspondência ajuda na conferência de dados, mas não certifica autoria nem direitos autorais.</p></>}
         </section>}
+
+        <section className="results-section" id="catalog">
+          <div className="section-heading"><div><span className="section-kicker">API JAVA • CATÁLOGO LOCAL</span><h2>Sua biblioteca</h2></div>{catalog.length > 0 && <span className="result-count">{catalog.length} FAIXAS</span>}</div>
+          {catalogError && <div className="notice" role="status"><span>ⓘ</span>{catalogError}</div>}
+          {catalog.length > 0 && <div className="recordings-list">{catalog.map(track => <div className="recording-row" key={track.id}><span>{track.title} <small>• {track.duration}</small></span><span>{track.artist} <button className="close-button" aria-pressed={track.favorite} aria-label={track.favorite ? `Desfavoritar ${track.title}` : `Favoritar ${track.title}`} onClick={() => toggleFavorite(track)}>{track.favorite ? "♥" : "♡"}</button></span></div>)}</div>}
+        </section>
         <footer><a className="footer-brand" href="#">sonora<span>.</span></a><span>Feito para explorar música com curiosidade.</span><span className="footer-status"><i /> FONTES EXTERNAS</span></footer>
       </section>
     </main>

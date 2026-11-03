@@ -36,3 +36,8 @@ frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 !frontend/.env.example
+# Gerado pelo Next.js a cada build/dev; não deve ser versionado.
+frontend/next-env.d.ts
+
+### Maven ###
+target/
