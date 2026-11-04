@@ -4,7 +4,7 @@ Projeto acadêmico de catálogo musical para a matéria de Gerenciamento de Proj
 
 ## O que existe no código
 
-- **Catálogo:** lista inicial de músicas e operações para consultar, adicionar e remover faixas.
+- **Catálogo:** lista inicial de oito músicas fictícias; a API HTTP expõe esse catálogo somente para leitura. O menu de terminal mantém as operações locais já existentes.
 - **Pesquisa local:** procura músicas pelo título ou artista, sem diferenciar maiúsculas de minúsculas.
 - **Descoberta externa:** busca faixas no SoundCloud e confere título, artista e letra (LRCLIB/MusicBrainz) pela API HTTP e pela interface web.
 - **Favoritos:** mantém faixas favoritas e impede duplicatas.
@@ -29,7 +29,21 @@ Na raiz do repositório, execute:
 mvn clean verify
 ```
 
-O comando compila os fontes e executa os testes automatizados. Para iniciar o menu de terminal:
+O comando compila os fontes e executa os testes automatizados.
+
+### IntelliJ IDEA / importação do Maven
+
+O projeto deve ser aberto pela raiz usando o arquivo `pom.xml`, como projeto Maven — não como um módulo Java criado manualmente.
+
+1. Abra a pasta do repositório e selecione **Open as Project** a partir do `pom.xml` (ou adicione o `pom.xml` à janela Maven).
+2. Na janela **Maven**, use **Reload All Maven Projects** para resolver as dependências declaradas no POM.
+3. Configure **Project SDK** e **Maven Runner JRE** para JDK 17.
+4. Confirme que `Dependencies` do Maven contém `com.fasterxml.jackson.core:jackson-databind:2.18.2`.
+5. Execute `mvn clean verify` na raiz. Não adicione JARs manualmente ao módulo.
+
+Os arquivos de configuração locais do IntelliJ (`.idea/` e `*.iml`) não são versionados: cada integrante gera sua configuração a partir do POM, evitando SDKs ou classpaths desatualizados de outra máquina.
+
+Para iniciar o menu de terminal:
 
 ```bash
 mvn -q org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass=Main
