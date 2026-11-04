@@ -155,26 +155,18 @@ public final class ApiServer {
     }
 
     /** /api/tracks e /api/tracks/{id}. */
-    private Response tracks(String method, List<String> rest, Map<String, String> query, HttpExchange exchange)
-            throws IOException {
+    private Response tracks(String method, List<String> rest, Map<String, String> query, HttpExchange exchange) {
+        // O catálogo de demonstração é somente leitura pela API. A descoberta externa
+        // possui rotas próprias e nunca cadastra/remove faixas deste catálogo.
         if (rest.size() == 1) {
             if (method.equals("GET")) return ok(Map.of("tracks", library.listTracks(query.get("q"))));
-            if (method.equals("POST")) {
-                JsonNode body = readJson(exchange);
-                int duration = requireInt(body, "durationSeconds");
-                return new Response(201, library.addTrack(text(body, "title"), text(body, "artist"), duration), null);
-            }
-            return methodNotAllowed("GET, POST");
+            return methodNotAllowed("GET");
         }
         if (rest.size() == 2) {
+            if (!method.equals("GET")) return methodNotAllowed("GET");
             String id = rest.get(1);
-            if (method.equals("GET")) {
-                return library.findTrack(id).map(ApiServer::ok).orElseGet(() -> error(404, "Faixa não encontrada."));
-            }
-            if (method.equals("DELETE")) {
-                return library.removeTrack(id) ? noContent() : error(404, "Faixa não encontrada.");
-            }
-            return methodNotAllowed("GET, DELETE");
+            return library.findTrack(id).map(ApiServer::ok)
+                    .orElseGet(() -> error(404, "Faixa não encontrada."));
         }
         return notFound();
     }

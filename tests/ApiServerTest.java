@@ -62,20 +62,22 @@ class ApiServerTest {
     }
 
     @Test
-    void cadastraFaixaEValidaCorpo() throws Exception {
-        HttpResponse<String> created = send("POST", "/api/tracks",
-                "{\"title\":\" Nova Faixa \",\"artist\":\"Banda\",\"durationSeconds\":185}");
-        assertEquals(201, created.statusCode());
-        JsonNode track = body(created);
-        assertEquals("Nova Faixa", track.get("title").asText());
-        assertEquals("03:05",track.get("duration").asText());
+    void apiMantemCatalogoDeDemonstracaoSomenteLeitura() throws Exception {
+        JsonNode before = body(send("GET", "/api/tracks", null)).get("tracks");
+        assertEquals(8, before.size());
 
-        assertEquals(400, send("POST", "/api/tracks", "{nao e json").statusCode());
-        assertEquals(400, send("POST", "/api/tracks", "{\"title\":\"\",\"artist\":\"x\",\"durationSeconds\":1}")
-                .statusCode());
-        assertEquals(400, send("POST", "/api/tracks", "{\"title\":\"a\",\"artist\":\"x\",\"durationSeconds\":\"1\"}")
-                .statusCode());
-        assertEquals(413, send("POST", "/api/tracks", "x".repeat(ApiServer.MAX_BODY_BYTES + 1)).statusCode());
+        HttpResponse<String> create = send("POST", "/api/tracks",
+                "{\"title\":\"Nova Faixa\",\"artist\":\"Banda\",\"durationSeconds\":185}");
+        assertEquals(405, create.statusCode());
+        assertEquals("GET", create.headers().firstValue("Allow").orElse(""));
+
+        HttpResponse<String> remove = send("DELETE", "/api/tracks/t-002", null);
+        assertEquals(405, remove.statusCode());
+        assertEquals("GET", remove.headers().firstValue("Allow").orElse(""));
+
+        JsonNode after = body(send("GET", "/api/tracks", null)).get("tracks");
+        assertEquals(before, after);
+        assertEquals("Imagine", body(send("GET", "/api/tracks/t-002", null)).get("title").asText());
     }
 
     @Test
@@ -94,7 +96,7 @@ class ApiServerTest {
     }
 
     @Test
-    void fluxoDePlaylistERemocaoEmCascata() throws Exception {
+    void fluxoDePlaylistNaoRemoveFaixasDoCatalogo() throws Exception {
         HttpResponse<String> created = send("POST", "/api/playlists", "{\"name\":\"Estrada\"}");
         assertEquals(201, created.statusCode());
         int id = body(created).get("id").asInt();
@@ -105,12 +107,15 @@ class ApiServerTest {
         assertEquals(404, send("PUT", "/api/playlists/" + id + "/tracks/nao-existe", null).statusCode());
         assertEquals(404, send("PUT", "/api/playlists/999/tracks/t-002", null).statusCode());
 
-        // Remover a faixa do catálogo também a retira da playlist e dos favoritos.
         send("PUT", "/api/favorites/t-002", null);
-        assertEquals(204, send("DELETE", "/api/tracks/t-002", null).statusCode());
-        assertEquals(0, body(send("GET", "/api/playlists/" + id, null)).get("trackCount").asInt());
-        assertEquals(0, body(send("GET", "/api/favorites", null)).get("tracks").size());
+        assertEquals(1, body(send("GET", "/api/favorites", null)).get("tracks").size());
 
+        assertEquals(200, send("DELETE", "/api/playlists/" + id + "/tracks/t-002", null).statusCode());
+        assertEquals(0, body(send("GET", "/api/playlists/" + id, null)).get("trackCount").asInt());
+        assertEquals(1, body(send("GET", "/api/favorites", null)).get("tracks").size());
+        assertEquals("Imagine", body(send("GET", "/api/tracks/t-002", null)).get("title").asText());
+
+        assertEquals(200, send("DELETE", "/api/favorites/t-002", null).statusCode());
         assertEquals(204, send("DELETE", "/api/playlists/" + id, null).statusCode());
         assertEquals(404, send("GET", "/api/playlists/" + id, null).statusCode());
         assertEquals(404, send("GET", "/api/playlists/abc", null).statusCode());
@@ -123,7 +128,7 @@ class ApiServerTest {
 
         HttpResponse<String> notAllowed = send("PATCH", "/api/tracks", null);
         assertEquals(405, notAllowed.statusCode());
-        assertEquals("GET, POST", notAllowed.headers().firstValue("Allow").orElse(""));
+        assertEquals("GET", notAllowed.headers().firstValue("Allow").orElse(""));
     }
 
     @Test
@@ -154,6 +159,9 @@ class ApiServerTest {
         JsonNode tracks = body(send("GET", "/api/discovery/search?q=song&limit=5", null)).get("tracks");
         assertEquals(1, tracks.size());
         assertEquals("soundcloud:tracks:1", tracks.get(0).get("id").asText());
+        JsonNode catalogAfterSearch = body(send("GET", "/api/tracks", null)).get("tracks");
+        assertEquals(8, catalogAfterSearch.size());
+        assertEquals(404, send("GET", "/api/tracks/soundcloud:tracks:1", null).statusCode());
 
         assertEquals(400, send("GET", "/api/discovery/search?q=", null).statusCode());
         assertEquals(400, send("GET", "/api/discovery/search?q=x&limit=abc", null).statusCode());

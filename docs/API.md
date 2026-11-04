@@ -12,6 +12,12 @@ Cliente tipado do frontend: [`frontend/src/lib/api.ts`](../frontend/src/lib/api.
 - CORS só para as origens em `API_ALLOWED_ORIGINS` (padrão `http://localhost:3000`, `http://127.0.0.1:3000`).
 - Estado em memória, sem autenticação. Não exponha a API publicamente.
 
+## Isolamento do catálogo de demonstração
+
+- As rotas `/api/tracks` e `/api/tracks/{id}` são somente leitura (`GET`). Tentativas de `POST` ou `DELETE` recebem `405` e `Allow: GET`.
+- A descoberta externa usa `/api/discovery/*` e retorna resultados independentes; pesquisar no SoundCloud não cadastra nem remove músicas do catálogo fictício.
+- Favoritos e playlists podem ser alterados, mas essas operações não editam as faixas do catálogo.
+
 ## Modelos
 
 ```ts
@@ -29,10 +35,8 @@ Recording        = { id, title, artist, album|null, length: number|null /* ms */
 | Método | Rota | Corpo | Resposta |
 |---|---|---|---|
 | GET | `/api/health` | — | `{status: "ok", soundCloudConfigured: boolean}` |
-| GET | `/api/tracks?q=` | — | `{tracks: Track[]}` (`q` opcional filtra por título/artista) |
-| POST | `/api/tracks` | `{title, artist, durationSeconds}` | `201 Track` · `400` validação |
+| GET | `/api/tracks?q=` | — | `{tracks: Track[]}` (`q` opcional filtra por título/artista; somente leitura) |
 | GET | `/api/tracks/{id}` | — | `Track` · `404` |
-| DELETE | `/api/tracks/{id}` | — | `204` (remove também de favoritos e playlists) · `404` |
 | GET | `/api/favorites` | — | `{tracks: Track[]}` |
 | PUT / DELETE | `/api/favorites/{trackId}` | — | `{trackId, favorite, changed}` · `404` faixa inexistente |
 | GET | `/api/playlists` | — | `{playlists: PlaylistSummary[]}` |
