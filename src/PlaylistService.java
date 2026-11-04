@@ -48,6 +48,55 @@ public class PlaylistService {
     }
 
     /**
+     * Resultado de associar uma faixa a uma playlist.
+     * A lista só muda em {@link #ADICIONADA}.
+     */
+    public enum ResultadoAdicaoFaixa {
+        /** A faixa passou nas validações e entrou na playlist. */
+        ADICIONADA,
+        /** Playlist e faixa existem, mas a faixa já estava na lista. */
+        JA_PRESENTE,
+        /** Não há playlist com o ID informado; nada foi alterado. */
+        PLAYLIST_INEXISTENTE,
+        /** A faixa não está no catálogo; nada foi alterado. */
+        FAIXA_INEXISTENTE
+    }
+
+    /**
+     * Adiciona uma faixa a uma playlist a partir dos IDs informados no terminal.
+     * Confere a playlist e a faixa no catálogo antes de alterar a lista.
+     * Grava o ID canônico da faixa ({@code Track.id()}), no mesmo formato do catálogo ({@code t-001}).
+     * O grupo não documentou permissão para repetir a mesma faixa na mesma playlist,
+     * então uma segunda inclusão é recusada e a ordem atual é mantida.
+     *
+     * @param playlistId ID numérico da playlist
+     * @param faixaId ID da faixa digitado pelo usuário
+     * @param catalogo catálogo usado para confirmar que a faixa existe
+     * @return o que aconteceu, sem lançar quando playlist ou faixa não existem
+     */
+    public ResultadoAdicaoFaixa adicionarFaixa(int playlistId, String faixaId, CatalogService catalogo) {
+        Objects.requireNonNull(catalogo, "catalogo");
+
+        Playlist playlist = playlists.get(playlistId);
+        if (playlist == null) {
+            return ResultadoAdicaoFaixa.PLAYLIST_INEXISTENTE;
+        }
+
+        String informado = faixaId == null ? "" : faixaId.strip();
+        Optional<Track> faixa = informado.isEmpty() ? Optional.empty() : catalogo.findById(informado);
+        if (faixa.isEmpty()) {
+            return ResultadoAdicaoFaixa.FAIXA_INEXISTENTE;
+        }
+
+        // ID do catálogo, não o texto cru, para a playlist e a consulta usarem a mesma chave.
+        String idAlinhado = faixa.get().id();
+        if (!playlist.adicionarFaixa(idAlinhado)) {
+            return ResultadoAdicaoFaixa.JA_PRESENTE;
+        }
+        return ResultadoAdicaoFaixa.ADICIONADA;
+    }
+
+    /**
      * Remove a playlist com o ID informado.
      *
      * @return true quando uma playlist foi removida

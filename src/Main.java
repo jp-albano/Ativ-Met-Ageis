@@ -174,23 +174,31 @@ public class Main {
     }
 
     private static void adicionarMusicaNaPlaylist() {
-        Optional<Playlist> escolhida = escolherPlaylist();
-        if (escolhida.isEmpty()) {
-            return;
-        }
+        listarPlaylists();
         listarCatalogo();
-        String id = lerLinha("Id da música a adicionar: ").strip();
-        Optional<Track> musica = catalogo.findById(id);
-        if (musica.isEmpty()) {
-            System.out.println("Música não encontrada: " + id);
+
+        String textoPlaylist = lerLinha("Id da playlist: ").strip();
+        final int playlistId;
+        try {
+            playlistId = Integer.parseInt(textoPlaylist);
+        } catch (NumberFormatException e) {
+            System.out.println("Id de playlist inválido: \"" + textoPlaylist + "\" (use apenas números).");
             return;
         }
 
-        Playlist playlist = escolhida.get();
-        if (playlist.adicionarFaixa(id)) {
-            System.out.println("\"" + musica.get().title() + "\" adicionada a \"" + playlist.getNome() + "\".");
-        } else {
-            System.out.println("Essa música já está na playlist.");
+        String faixaId = lerLinha("Id da faixa: ").strip();
+        switch (playlists.adicionarFaixa(playlistId, faixaId, catalogo)) {
+            case ADICIONADA -> {
+                String titulo = catalogo.findById(faixaId).map(Track::title).orElse(faixaId);
+                String nome = playlists.buscarPorId(playlistId).map(Playlist::getNome).orElse(String.valueOf(playlistId));
+                System.out.println("\"" + titulo + "\" adicionada a \"" + nome + "\".");
+            }
+            case JA_PRESENTE ->
+                    System.out.println("Essa faixa já está na playlist. A mesma faixa não é inserida de novo.");
+            case PLAYLIST_INEXISTENTE ->
+                    System.out.println("Playlist não encontrada: " + textoPlaylist);
+            case FAIXA_INEXISTENTE ->
+                    System.out.println("Faixa não encontrada no catálogo: " + faixaId);
         }
     }
 
