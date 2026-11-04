@@ -6,13 +6,14 @@ A classe `SoundCloudSearchService` usa a API oficial `GET https://api.soundcloud
 Ela não baixa capas nem áudio: devolve os metadados e as URLs que a API disponibiliza.
 
 1. Cadastre/configure o aplicativo conforme as regras do SoundCloud Developers.
-2. Obtenha um token válido com acesso de pesquisa pública.
-3. Configure a variável de ambiente `SOUNDCLOUD_ACCESS_TOKEN`; nunca cole o token no código ou em commits.
+2. Configure `SOUNDCLOUD_CLIENT_ID` e `SOUNDCLOUD_CLIENT_SECRET` no ambiente (recomendado). O serviço obtém o token pelo fluxo OAuth *client credentials*, reaproveita-o até perto do vencimento e o renova após um `401`.
+3. Alternativa para testes rápidos: `SOUNDCLOUD_ACCESS_TOKEN` com um token fixo (expira em cerca de uma hora). Se as duas formas existirem, client credentials tem prioridade.
 
-Windows PowerShell (somente na sessão atual):
+Nunca cole credenciais no código ou em commits. Windows PowerShell (somente na sessão atual):
 
 ```powershell
-$env:SOUNDCLOUD_ACCESS_TOKEN = "COLOQUE_SEU_TOKEN_LOCALMENTE"
+$env:SOUNDCLOUD_CLIENT_ID = "COLOQUE_LOCALMENTE"
+$env:SOUNDCLOUD_CLIENT_SECRET = "COLOQUE_LOCALMENTE"
 ```
 
 Exemplo Java:
@@ -88,4 +89,4 @@ System.out.println("Metadados independentes: "
 
 ## 6. O que ainda não está implementado
 
-Estas classes criam a camada de integração, mas o projeto ainda precisa de uma interface de usuário para exibir resultados, capa, links e letras. Também não foi implementado player de áudio, login OAuth completo, cache persistente, busca unificada com múltiplos provedores ou fluxo de reprodução semelhante ao Spotify.
+A interface web exibe resultados, capas, links e letras através da API HTTP (`DiscoveryApi`, rotas `/api/discovery/*` em [`docs/API.md`](API.md)). Ainda não foram implementados player de áudio, login de usuário, cache persistente, busca com múltiplos provedores ou fluxo de reprodução semelhante ao Spotify.

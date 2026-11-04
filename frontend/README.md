@@ -1,25 +1,36 @@
 # Sonora — interface web
 
-Interface responsiva em Next.js + React para pesquisar faixas no SoundCloud e comparar letras/metadados usando LRCLIB e MusicBrainz.
+Interface responsiva em Next.js + React que consome a API Java do projeto: catálogo local com favoritos, busca de faixas no SoundCloud e conferência de letras/metadados (LRCLIB e MusicBrainz).
 
 ## Requisitos
 - Node.js 20.9 ou superior
 - npm
-- Token autorizado da API do SoundCloud para a busca externa
+- API Java rodando (veja "Como rodar a API e a interface web" no [README principal](../README.md))
 
 ## Executar localmente
 
 ```bash
 cd frontend
 npm install
-# Copie .env.example para .env.local e configure SOUNDCLOUD_ACCESS_TOKEN
+# Opcional: copie .env.example para .env.local se a API não estiver em http://127.0.0.1:8080
 npm run dev
 ```
 
-Abra http://localhost:3000. O token fica no servidor nas rotas `/api/search`; não o coloque em variáveis `NEXT_PUBLIC_*` nem o envie ao navegador.
+Abra http://localhost:3000.
 
-## Rotas
-- `GET /api/search?q=...`: pesquisa faixas públicas no SoundCloud.
-- `GET /api/verify?title=...&artist=...&duration=...`: consulta LRCLIB e MusicBrainz; uma fonte pode falhar sem apagar os resultados da outra.
+## Como o frontend fala com a API
+
+- O navegador chama apenas caminhos relativos `/api/...`. O `next.config.ts` repassa essas requisições para `BACKEND_URL` (padrão `http://127.0.0.1:8080`).
+- Use sempre o cliente tipado [`src/lib/api.ts`](src/lib/api.ts); ele converte erros e falta de conexão em mensagens prontas para exibir.
+- O contrato completo das rotas está em [`docs/API.md`](../docs/API.md).
+- O frontend não guarda segredos: as credenciais do SoundCloud ficam só no backend. Nunca use variáveis `NEXT_PUBLIC_*` para segredos.
+- Se o frontend precisar de algo que a API não oferece, registre o pedido no README principal ("Pedidos para a equipe de backend").
+
+## Verificações
+
+```bash
+npm run lint
+npm run build
+```
 
 A UI identifica correspondências aproximadas e não certifica autoria/direitos autorais. A reprodução de áudio não está implementada; o link abre a faixa na plataforma de origem. Capas e letras são exibidas apenas quando o provedor retorna esses dados; respeite os termos e direitos aplicáveis.
