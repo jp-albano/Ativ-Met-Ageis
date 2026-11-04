@@ -6,8 +6,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Camada de serviço responsável por criar, listar e localizar playlists.
- * O LinkedHashMap mantém as playlists na ordem em que foram criadas.
+ * Camada de serviço responsável por criar, listar, localizar e incluir faixas em playlists.
+ * IDs de playlist são numéricos; IDs de faixa seguem o catálogo ({@code t-001}, {@code t-002}, ...).
  */
 public class PlaylistService {
 
@@ -114,5 +114,47 @@ public class PlaylistService {
                             .append(System.lineSeparator()));
         }
         return saida.toString();
+    }
+
+    /**
+     * Inclui uma faixa a partir dos IDs digitados no terminal.
+     * Valida playlist e catálogo antes de alterar a lista.
+     * Persiste o ID oficial da faixa ({@link Track#id()}), não o texto cru.
+     * O grupo não permite a mesma faixa duas vezes na mesma playlist.
+     *
+     * @throws IllegalArgumentException se a playlist não existir, a faixa não estiver
+     *                                 no catálogo, o ID estiver em branco ou a faixa já estiver na lista
+     */
+    public Playlist adicionarFaixa(int playlistId, String faixaId, CatalogService catalogo) {
+        Objects.requireNonNull(catalogo, "catalogo");
+
+        if (faixaId == null || faixaId.isBlank()) {
+            throw new IllegalArgumentException("Informe o ID da faixa.");
+        }
+
+        Playlist playlist = buscarPorId(playlistId).orElseThrow(
+                () -> new IllegalArgumentException("Playlist não encontrada: " + playlistId));
+
+        Track faixa = alinharFaixaDoCatalogo(faixaId.strip(), catalogo).orElseThrow(
+                () -> new IllegalArgumentException("Faixa não encontrada no catálogo: " + faixaId.strip()));
+
+        if (!playlist.adicionarFaixa(faixa.id())) {
+            throw new IllegalArgumentException("Essa faixa já está na playlist.");
+        }
+        return playlist;
+    }
+
+    /**
+     * Resolve o ID digitado para a faixa real do catálogo.
+     * Aceita espaços nas pontas e diferença de maiúsculas, mas grava o ID original (t-001).
+     */
+    private Optional<Track> alinharFaixaDoCatalogo(String faixaId, CatalogService catalogo) {
+        Optional<Track> exata = catalogo.findById(faixaId);
+        if (exata.isPresent()) {
+            return exata;
+        }
+        return catalogo.getAllTracks().stream()
+                .filter(track -> track.id().equalsIgnoreCase(faixaId))
+                .findFirst();
     }
 }
