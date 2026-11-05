@@ -1,17 +1,23 @@
 import java.io.File;
+import java.io.IOException;
 import java.text.Normalizer;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Scanner;
-import java.util.Set;
 
 public class Main {
 
+    private static final int RESULTADOS_ONLINE = 5;
+
     private static final CatalogService catalogo = new CatalogService();
     private static final PlaylistService playlists = new PlaylistService();
+    private static final FavoriteService favoritos = new FavoriteService();
+    private static final SearchService busca = new SearchService();
+    private static final AudioPlayerService player = new AudioPlayerService();
+    private static final MusicDiscoveryService descoberta = new MusicDiscoveryService();
     private static final Scanner entrada = new Scanner(System.in);
 
     public static void main(String[] args) {
@@ -45,7 +51,16 @@ public class Main {
                 7. Ver faixas de uma playlist
                 8. Adicionar música a uma playlist
                 9. Remover música de uma playlist
-                0. Sair
+                10. Abrir área de playlists
+                ----- Favoritas -----
+                11. Favoritar / desfavoritar música
+                12. Listar favoritas
+                ----- Player -----
+                13. Selecionar música para tocar
+                14. Tocar / retomar
+                15. Pausar
+                16. Parar
+                17. Ver progresso
                 """);
     }
 
@@ -60,10 +75,18 @@ public class Main {
             case "7" -> verFaixasDaPlaylist();
             case "8" -> adicionarMusicaNaPlaylist();
             case "9" -> removerMusicaDaPlaylist();
+            case "10" -> new AreaDePlaylists(playlists, catalogo, entrada).abrir();
+            case "11" -> alternarFavorita();
+            case "12" -> listarFavoritas();
+            case "13" -> selecionarMusicaParaTocar();
+            case "14" -> tocarMusica();
+            case "15" -> pausarMusica();
+            case "16" -> pararMusica();
+            case "17" -> player.exibirProgresso();
             case "0" -> {
                 return false;
             }
-            default -> System.out.println("Opção inválida. Digite um número de 0 a 9.");
+            default -> System.out.println("Opção inválida. Digite um número de 0 a 19.");
         }
         return true;
     }
@@ -108,32 +131,36 @@ public class Main {
     }
 
     private static void buscarMusica() {
-        String termo = lerLinha("Termo de busca (título ou artista): ").strip();
-        if (termo.isEmpty()) {
-            System.out.println("Digite um termo de busca.");
-            return;
+        String termo = lerLinha("Termo de busca (título ou artista): ");
+        try {
+            List<Track> resultado = busca.search(termo, catalogo.getAllTracks());
+            if (resultado.isEmpty()) {
+                System.out.println("Nenhuma música encontrada para \"" + termo.strip() + "\".");
+                return;
+            }
+            System.out.println("\n" + resultado.size() + " resultado(s):");
+            resultado.forEach(Main::imprimirMusica);
+        } catch (IllegalArgumentException e) {
+            System.out.println(e.getMessage());
         }
-
-        Set<Track> resultado = new LinkedHashSet<>(catalogo.findByTitle(termo));
-        resultado.addAll(catalogo.findByArtist(termo));
-
-        if (resultado.isEmpty()) {
-            System.out.println("Nenhuma música encontrada para \"" + termo + "\".");
-            return;
-        }
-        System.out.println("\n" + resultado.size() + " resultado(s):");
-        resultado.forEach(Main::imprimirMusica);
     }
 
     private static void removerMusicaDoCatalogo() {
         listarCatalogo();
         String id = lerLinha("Id da música a remover: ").strip();
-        if (!catalogo.removeById(id)) {
+        Optional<Track> musica = catalogo.findById(id);
+        if (musica.isEmpty()) {
             System.out.println("Música não encontrada: " + id);
             return;
         }
-        playlists.listar().forEach(p -> p.removerFaixa(id));
-        System.out.println("Música " + id + " removida do catálogo e das playlists.");
+        catalogo.removeById(id);
+        // Playlists, favoritas e player guardam referências à música; limpar todos evita dados órfãos.
+        playlists.removerFaixaDeTodas(id);
+        favoritos.remove(musica.get());
+        if (player.getFaixaAtual().filter(t -> t.id().equals(id)).isPresent()) {
+            player.limparSelecao();
+        }
+        System.out.println("Música " + id + " removida do catálogo, das playlists e das favoritas.");
     }
 
     // ------------------------------------------------------------- playlists
@@ -232,6 +259,122 @@ public class Main {
             System.out.println("Id de playlist inválido: \"" + texto + "\" (use apenas números).");
             return Optional.empty();
         }
+    }
+
+    // ------------------------------------------------------------- favoritas
+
+    private static void alternarFavorita() {
+        listarCatalogo();
+        String id = lerLinha("Id da música: ").strip();
+        catalogo.findById(id).ifPresentOrElse(
+                t -> System.out.println(favoritos.toggle(t)
+                        ? "\"" + t.title() + "\" adicionada às favoritas."
+                        : "\"" + t.title() + "\" removida das favoritas."),
+                () -> System.out.println("Música não encontrada: " + id));
+    }
+
+    private static void listarFavoritas() {
+        List<Track> todas = favoritos.getFavorites();
+        if (todas.isEmpty()) {
+            System.out.println("Nenhuma música favorita ainda.");
+            return;
+        }
+        System.out.println("\nFavoritas (" + todas.size() + "):");
+        todas.forEach(Main::imprimirMusica);
+    }
+
+    // ---------------------------------------------------------------- player
+
+    private static void selecionarMusicaParaTocar() {
+        listarCatalogo();
+        String id = lerLinha("Id da música a tocar: ").strip();
+        catalogo.findById(id).ifPresentOrElse(
+                t -> {
+                    player.selecionar(t);
+                    System.out.println("Música selecionada: " + t.title() + " - " + t.artist()
+                            + " (" + t.formattedDuration() + "). Use a opção 14 para tocar.");
+                },
+                () -> System.out.println("Música não encontrada: " + id));
+    }
+
+    private static void tocarMusica() {
+        try {
+            int posicao = player.getPosicaoSegundos();
+            if (!player.tocar()) {
+                System.out.println("A música já está tocando.");
+            } else if (posicao > 0) {
+                System.out.println("Retomando de " + AudioPlayerService.formatarTempo(posicao) + ".");
+            } else {
+                System.out.println("Tocando do início.");
+            }
+        } catch (IllegalStateException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private static void pausarMusica() {
+        if (player.pausar()) {
+            System.out.println("Pausado em " + AudioPlayerService.formatarTempo(player.getPosicaoSegundos())
+                    + ". Use a opção 14 para retomar daqui.");
+        } else {
+            System.out.println("Nenhuma música está tocando.");
+        }
+    }
+
+    private static void pararMusica() {
+        if (player.parar()) {
+            System.out.println("Reprodução parada e posição reiniciada.");
+        } else {
+            System.out.println("Não há nada para parar.");
+        }
+    }
+
+    // ------------------------------------------------------ descoberta online
+
+    static String descreverResultadosSoundCloud(List<SoundCloudSearchService.SoundCloudTrack> resultados) {
+        if (resultados.isEmpty()) {
+            return "Nenhum resultado no SoundCloud.";
+        }
+        List<String> linhas = new ArrayList<>();
+        linhas.add("\n" + resultados.size() + " resultado(s) no SoundCloud:");
+        for (SoundCloudSearchService.SoundCloudTrack r : resultados) {
+            linhas.add("  %s - %s (%s)".formatted(r.title(), r.artist(),
+                    AudioPlayerService.formatarTempo((int) (r.durationMillis() / 1000))));
+            if (r.permalinkUrl() != null) {
+                linhas.add("    " + r.permalinkUrl());
+            }
+        }
+        return String.join(System.lineSeparator(), linhas);
+    }
+
+    static String descreverVerificacao(MusicDiscoveryService.TrackVerification v) {
+        List<String> linhas = new ArrayList<>();
+        linhas.add("");
+        linhas.add("Letra (LRCLIB):");
+        LyricsVerificationService.VerificationResult letra = v.lyrics();
+        if (letra == null) {
+            linhas.add("  Sem resposta.");
+        } else {
+            linhas.add("  " + letra.message());
+            if (letra.found()) {
+                linhas.add("  Encontrada: %s - %s (%s)".formatted(letra.title(), letra.artist(),
+                        AudioPlayerService.formatarTempo(letra.durationSeconds())));
+                linhas.add("  Verificada: " + (letra.verified() ? "sim" : "não, correspondência aproximada"));
+                linhas.add("  Letra disponível: "
+                        + (letra.instrumental() ? "instrumental" : letra.plainLyrics() != null ? "sim" : "não"));
+            }
+        }
+        linhas.add("Metadados (MusicBrainz):");
+        if (!v.hasMetadataCandidates()) {
+            linhas.add("  Nenhum registro encontrado.");
+        }
+        for (MusicMetadataVerificationService.RecordingMetadata m : v.metadataMatches()) {
+            String album = m.album() == null ? "" : " [" + m.album() + "]";
+            String duracao = m.durationMillis() > 0
+                    ? " (" + AudioPlayerService.formatarTempo((int) (m.durationMillis() / 1000)) + ")" : "";
+            linhas.add("  " + m.title() + " - " + m.artist() + album + duracao);
+        }
+        return String.join(System.lineSeparator(), linhas);
     }
 
     // --------------------------------------------------------------- apoio
