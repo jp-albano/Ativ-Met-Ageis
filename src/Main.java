@@ -31,6 +31,8 @@ public class Main {
         } catch (NoSuchElementException e) {
             // Scanner.nextLine() lança esta exceção quando não há mais linhas para ler.
             System.out.println("\nEntrada encerrada.");
+        } finally {
+            player.close();
         }
         System.out.println("Até logo!");
     }
@@ -61,6 +63,7 @@ public class Main {
                 15. Pausar
                 16. Parar
                 17. Ver progresso
+                18. Abrir submenu do player
                 """);
     }
 
@@ -83,10 +86,11 @@ public class Main {
             case "15" -> pausarMusica();
             case "16" -> pararMusica();
             case "17" -> player.exibirProgresso();
+            case "18" -> player.abrirMenu(entrada);
             case "0" -> {
                 return false;
             }
-            default -> System.out.println("Opção inválida. Digite um número de 0 a 19.");
+            default -> System.out.println("Opção inválida. Digite um número de 0 a 18.");
         }
         return true;
     }
@@ -308,7 +312,7 @@ public class Main {
                 System.out.println("Tocando do início.");
             }
         } catch (IllegalStateException e) {
-            System.out.println(e.getMessage());
+            System.out.println("Não foi possível tocar a faixa: " + e.getMessage());
         }
     }
 

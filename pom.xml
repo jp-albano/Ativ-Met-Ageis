@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Build reproduzível com Java 17, Jackson para JSON e JUnit 5 para testes. -->
+<!-- Build reproduzível com Java 25, Jackson para JSON e JUnit 5 para testes. -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -11,7 +11,7 @@
     <description>Catálogo musical com pesquisa, favoritos, playlists e provedores externos.</description>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.11.4</junit.version>
         <jackson.version>2.18.2</jackson.version>
