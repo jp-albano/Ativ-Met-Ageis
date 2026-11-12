@@ -145,6 +145,33 @@ public class PlaylistService {
     }
 
     /**
+     * Tira uma faixa da playlist pelo ID informado no terminal.
+     * Aceita espaços nas pontas e diferença de maiúsculas. A faixa não precisa
+     * continuar no catálogo para sair da lista.
+     *
+     * @throws IllegalArgumentException se a playlist não existir, o ID estiver em branco
+     *                                 ou a faixa não estiver na playlist
+     */
+    public Playlist removerFaixa(int playlistId, String faixaId) {
+        if (faixaId == null || faixaId.isBlank()) {
+            throw new IllegalArgumentException("Informe o ID da faixa.");
+        }
+
+        Playlist playlist = buscarPorId(playlistId).orElseThrow(
+                () -> new IllegalArgumentException("Playlist não encontrada: " + playlistId));
+
+        String informado = faixaId.strip();
+        String idNaLista = playlist.getFaixaIds().stream()
+                .filter(id -> id.equalsIgnoreCase(informado))
+                .findFirst()
+                .orElse(informado);
+        if (!playlist.removerFaixa(idNaLista)) {
+            throw new IllegalArgumentException("Essa faixa não está na playlist.");
+        }
+        return playlist;
+    }
+
+    /**
      * Resolve o ID digitado para a faixa real do catálogo.
      * Aceita espaços nas pontas e diferença de maiúsculas, mas grava o ID original (t-001).
      */
