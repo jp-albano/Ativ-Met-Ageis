@@ -31,6 +31,7 @@ export default function Home() {
   const [savingTrackId, setSavingTrackId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
   const [playlistName, setPlaylistName] = useState("");
@@ -40,6 +41,7 @@ export default function Home() {
 
   // Carrega o catálogo do backend Java uma vez; se a API estiver fora, mostra o aviso na seção.
   useEffect(() => {
+    api.health().then(health => setApiOnline(health.status === "ok")).catch(() => setApiOnline(false));
     api.listTracks().then(setCatalog).catch(e => setCatalogError(errorMessage(e, "Falha ao carregar o catálogo.")));
     api.listPlaylists().then(setPlaylists).catch(e => setPlaylistError(errorMessage(e, "Falha ao carregar as playlists.")));
   }, []);
@@ -271,7 +273,7 @@ export default function Home() {
             </div>
           </div>
         </section>
-        <footer><a className="footer-brand" href="#">sonora<span>.</span></a><span>Feito para explorar música com curiosidade.</span><span className="footer-status"><i /> FONTES EXTERNAS</span></footer>
+        <footer><a className="footer-brand" href="#">sonora<span>.</span></a><span>Feito para explorar música com curiosidade.</span><span className={`footer-status${apiOnline === false ? " offline" : ""}`} role="status" aria-live="polite"><i />{apiOnline === null ? "CONECTANDO API" : apiOnline ? "API CONECTADA" : "API INDISPONÍVEL"}</span></footer>
       </section>
     </main>
   );

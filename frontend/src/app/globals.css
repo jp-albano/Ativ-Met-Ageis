@@ -39,5 +39,7 @@
 .save-track-button:hover:not(:disabled){border-color:var(--lime);background:#29321f}
 .save-track-button:disabled{opacity:.65;cursor:default}
 .save-notice{margin-top:18px;padding:11px 13px;border:1px solid #46523a;border-radius:var(--radius-ui);background:#192017;color:var(--lime);font-size:11px}
+.footer-status.offline{color:#e9a9a9}
+.footer-status.offline i{background:#e07676;box-shadow:0 0 10px #e0767655}
 .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.playlist-layout{grid-template-columns:1fr}.playlist-list{display:flex;flex-direction:column}.playlist-item{min-height:42px}.playlist-detail{min-height:190px}}

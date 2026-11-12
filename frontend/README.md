@@ -21,6 +21,9 @@ Abra http://localhost:3000.
 ## Como o frontend fala com a API
 
 - O navegador chama apenas caminhos relativos `/api/...`. O `next.config.ts` repassa essas requisições para `BACKEND_URL` (padrão `http://127.0.0.1:8080`).
+- Na Vercel, configure `BACKEND_URL` com a URL absoluta HTTPS da API Java (por exemplo, `https://api.exemplo.com`) nas variáveis de ambiente de Production e Preview. O frontend adiciona `/api` ao endereço e mostra no rodapé se a API respondeu.
+- A Vercel hospeda o Next.js; a API Java precisa continuar rodando em um serviço separado e acessível pelo servidor da Vercel. O build na Vercel falha se `BACKEND_URL` não estiver definida.
+- **Atenção:** a API atual não tem autenticação e mantém os dados em memória. Não a exponha publicamente sem antes proteger o acesso; o frontend sozinho não substitui autenticação. Para busca no SoundCloud, configure também `SOUNDCLOUD_CLIENT_ID` e `SOUNDCLOUD_CLIENT_SECRET` somente no ambiente do backend.
 - Use sempre o cliente tipado [`src/lib/api.ts`](src/lib/api.ts); ele converte erros e falta de conexão em mensagens prontas para exibir.
 - O contrato completo das rotas está em [`docs/API.md`](../docs/API.md).
 - O frontend não guarda segredos: as credenciais do SoundCloud ficam só no backend. Nunca use variáveis `NEXT_PUBLIC_*` para segredos.
