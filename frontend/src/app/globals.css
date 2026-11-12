@@ -35,5 +35,9 @@
 .playlist-action:hover:not(:disabled){border-color:var(--lime)}
 .playlist-placeholder{min-height:180px;display:grid;place-content:center;text-align:center;color:var(--muted);font-size:11px}
 .playlist-placeholder>span{font-size:28px;color:var(--lime)}
+.save-track-button{width:100%;margin-top:11px;padding:8px 7px;border:1px solid #46523a;border-radius:var(--radius-ui);background:#20261d;color:var(--lime);font-size:10px;font-weight:600;text-align:center}
+.save-track-button:hover:not(:disabled){border-color:var(--lime);background:#29321f}
+.save-track-button:disabled{opacity:.65;cursor:default}
+.save-notice{margin-top:18px;padding:11px 13px;border:1px solid #46523a;border-radius:var(--radius-ui);background:#192017;color:var(--lime);font-size:11px}
 .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.playlist-layout{grid-template-columns:1fr}.playlist-list{display:flex;flex-direction:column}.playlist-item{min-height:42px}.playlist-detail{min-height:190px}}

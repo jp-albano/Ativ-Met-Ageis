@@ -28,6 +28,9 @@ export default function Home() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [catalog, setCatalog] = useState<CatalogTrack[]>([]);
   const [catalogError, setCatalogError] = useState("");
+  const [savingTrackId, setSavingTrackId] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
   const [playlistName, setPlaylistName] = useState("");
@@ -71,6 +74,30 @@ export default function Home() {
     } catch (e) {
       setError(errorMessage(e, "Falha ao verificar a faixa."));
     } finally { setVerifying(false); }
+  }
+
+  function isInCatalog(track: Track) {
+    const normalize = (value: string) => value.trim().toLocaleLowerCase();
+    return catalog.some(item =>
+      normalize(item.title) === normalize(track.title) &&
+      normalize(item.artist) === normalize(track.artist),
+    );
+  }
+
+  async function saveToCatalog(track: Track) {
+    if (isInCatalog(track)) return;
+    setSavingTrackId(track.id);
+    setSaveMessage("");
+    setSaveError("");
+    try {
+      const saved = await api.addTrack(track.title, track.artist, Math.round(track.durationMillis / 1000));
+      setCatalog(current => current.some(item => item.id === saved.id) ? current : [...current, saved]);
+      setSaveMessage(`“${saved.title}” foi adicionada à sua biblioteca.`);
+    } catch (e) {
+      setSaveError(errorMessage(e, "Não foi possível salvar a faixa no catálogo."));
+    } finally {
+      setSavingTrackId(null);
+    }
   }
 
   async function createPlaylist(event: FormEvent<HTMLFormElement>) {
@@ -159,10 +186,23 @@ export default function Home() {
         </section>
 
         {error && <div className="notice" role="status"><span>ⓘ</span>{error}</div>}
+        {saveError && <div className="notice" role="alert"><span>ⓘ</span>{saveError}</div>}
+        {saveMessage && <div className="save-notice" role="status">{saveMessage}</div>}
         <section className="results-section" id="results" aria-busy={searching}>
           <div className="section-heading"><div><span className="section-kicker">EXPLORE O CATÁLOGO</span><h2>{tracks.length ? "Resultados da busca" : "Comece por uma descoberta"}</h2></div>{tracks.length > 0 && <span className="result-count">{tracks.length} FAIXAS</span>}</div>
           {searching ? <div className="loading-line" role="status" aria-live="polite"><span className="spinner dark" /> Buscando faixas no SoundCloud…</div> : tracks.length === 0 ? <div className="empty-state"><div className="empty-icon"><span>♫</span><span>✳</span></div><h3>Seu próximo som está por aqui.</h3><p>Pesquise acima para ver faixas do SoundCloud, suas capas e os dados de cada artista.</p><div className="suggestions"><button onClick={() => setQuery("indie pop")}>indie pop <span>↗</span></button><button onClick={() => setQuery("lofi beats")}>lofi beats <span>↗</span></button><button onClick={() => setQuery("rock brasileiro")}>rock brasileiro <span>↗</span></button></div></div> :
-            <div className="track-grid">{tracks.map((track, index) => <article className={selected?.id === track.id ? "track-card selected" : "track-card"} key={track.id}><button className="cover-button" onClick={() => verify(track)} aria-label={`Verificar ${track.title}`}>{track.artworkUrl ? <img src={track.artworkUrl} alt={`Capa de ${track.title}`} /> : <span className="cover-placeholder">♫</span>}<span className="play-overlay">⌕</span><span className="track-index">{String(index + 1).padStart(2, "0")}</span></button><button className="track-title" onClick={() => verify(track)}>{track.title}</button><p className="track-artist">{track.artist}</p><div className="track-meta"><span>{duration(track.durationMillis)}</span><a href={track.permalinkUrl} target="_blank" rel="noreferrer">Abrir faixa ↗</a></div></article>)}</div>}
+            <div className="track-grid">{tracks.map((track, index) => {
+              const saved = isInCatalog(track);
+              return <article className={selected?.id === track.id ? "track-card selected" : "track-card"} key={track.id}>
+                <button className="cover-button" onClick={() => verify(track)} aria-label={`Verificar ${track.title}`}>{track.artworkUrl ? <img src={track.artworkUrl} alt={`Capa de ${track.title}`} /> : <span className="cover-placeholder">♫</span>}<span className="play-overlay">⌕</span><span className="track-index">{String(index + 1).padStart(2, "0")}</span></button>
+                <button className="track-title" onClick={() => verify(track)}>{track.title}</button>
+                <p className="track-artist">{track.artist}</p>
+                <div className="track-meta"><span>{duration(track.durationMillis)}</span><a href={track.permalinkUrl} target="_blank" rel="noreferrer">Abrir faixa ↗</a></div>
+                <button className="save-track-button" onClick={() => saveToCatalog(track)} disabled={saved || savingTrackId !== null}>
+                  {savingTrackId === track.id ? "Salvando…" : saved ? "Na biblioteca" : "＋ Salvar na biblioteca"}
+                </button>
+              </article>;
+            })}</div>}
         </section>
 
         {selected && <section className="verification-panel"><div className="verify-header"><div><span className="section-kicker">CONFERÊNCIA MUSICAL</span><h2>{selected.title}</h2><p>{selected.artist}</p></div><button className="close-button" onClick={() => {setSelected(null); setVerification(null);}}>×</button></div>

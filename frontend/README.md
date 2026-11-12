@@ -1,6 +1,6 @@
 # Sonora — interface web
 
-Interface responsiva em Next.js + React que consome a API Java do projeto: catálogo local com favoritos, playlists (criação e organização de faixas do catálogo), busca de faixas no SoundCloud e conferência de letras/metadados (LRCLIB e MusicBrainz). A API mantém playlists em memória; elas são perdidas quando o backend reinicia.
+Interface responsiva em Next.js + React que consome a API Java do projeto: catálogo local com favoritos, playlists (criação e organização de faixas do catálogo), busca de faixas no SoundCloud, opção para salvar resultados no catálogo e conferência de letras/metadados (LRCLIB e MusicBrainz). A API mantém catálogo e playlists em memória; eles são perdidos quando o backend reinicia.
 
 ## Requisitos
 - Node.js 20.9 ou superior
