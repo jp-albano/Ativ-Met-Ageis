@@ -11,7 +11,8 @@ import java.util.Objects;
  * @param artist artista ou intérprete
  * @param durationSeconds duração total em segundos
  * @param coverFile caminho do arquivo de capa (pode ser null quando não houver capa)
- * @param audioFile caminho do arquivo de áudio
+ * @param audioFile caminho do arquivo de áudio local
+ * @param origemId identificador da faixa na plataforma de origem, quando veio de uma pesquisa online
  */
 public record Track(
         String id,
@@ -19,8 +20,14 @@ public record Track(
         String artist,
         int durationSeconds,
         File coverFile,
-        File audioFile
+        File audioFile,
+        String origemId
 ) {
+
+    /** Faixa só local, sem identificador em uma plataforma externa. */
+    public Track(String id, String title, String artist, int durationSeconds, File coverFile, File audioFile) {
+        this(id, title, artist, durationSeconds, coverFile, audioFile, null);
+    }
 
     /** Valida os campos obrigatórios no momento da criação do objeto. */
     public Track {
@@ -30,6 +37,9 @@ public record Track(
         Objects.requireNonNull(audioFile, "audioFile");
         if (durationSeconds < 0) {
             throw new IllegalArgumentException("durationSeconds must be >= 0");
+        }
+        if (origemId != null && origemId.isBlank()) {
+            origemId = null;
         }
     }
 

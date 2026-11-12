@@ -11,9 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Pesquisa faixas na API oficial do SoundCloud.
@@ -26,7 +28,7 @@ import java.util.List;
  *       o expira em cerca de uma hora e ele precisa ser trocado manualmente.</li>
  * </ul>
  * Se as duas formas estiverem configuradas, client credentials tem prioridade.
- * A classe devolve metadados e URLs; a reprodução continua sujeita às regras do SoundCloud.
+ * A reprodução pede um stream temporário autorizado pela API e não grava o arquivo.
  */
 public final class SoundCloudSearchService {
     private static final String API_BASE = "https://api.soundcloud.com";
@@ -152,6 +154,79 @@ public final class SoundCloudSearchService {
             ));
         }
         return List.copyOf(tracks);
+    }
+
+    /**
+     * Pede à API a URL HTTPS de stream da faixa. Prefere o áudio completo e, se a API
+     * só liberar um trecho, usa a prévia. Não baixa o áudio.
+     *
+     * @param trackId URN ou id numérico devolvido na pesquisa
+     * @return vazio quando a faixa não tem stream autorizado em HTTPS
+     */
+    public Optional<URI> urlDeStream(String trackId) throws IOException, InterruptedException {
+        if (trackId == null || trackId.isBlank()) {
+            return Optional.empty();
+        }
+        if (!isConfigured()) {
+            throw new IllegalStateException("SoundCloud não configurado: defina SOUNDCLOUD_CLIENT_ID e "
+                    + "SOUNDCLOUD_CLIENT_SECRET (ou SOUNDCLOUD_ACCESS_TOKEN) no ambiente do servidor.");
+        }
+        String encoded = URLEncoder.encode(trackId.strip(), StandardCharsets.UTF_8);
+        URI uri = URI.create(apiBase + "/tracks/" + encoded + "/streams");
+        HttpResponse<String> response = sendSearch(uri, accessToken(false));
+        if (response.statusCode() == 401 && usesClientCredentials()) {
+            response = sendSearch(uri, accessToken(true));
+        }
+        if (response.statusCode() == 401 || response.statusCode() == 403 || response.statusCode() == 404) {
+            return Optional.empty();
+        }
+        if (response.statusCode() == 429) {
+            throw new SoundCloudException(429, "Limite de requisições do SoundCloud atingido. Tente mais tarde.");
+        }
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new SoundCloudException(response.statusCode(),
+                    "O SoundCloud não informou o áudio da faixa (HTTP " + response.statusCode() + ").");
+        }
+        return escolherUrlDeStream(json.readTree(response.body()));
+    }
+
+    /**
+     * Abre o stream já autorizado. O chamador fecha o fluxo. O conteúdo não é salvo em arquivo.
+     */
+    public InputStream baixarAudio(URI url) throws IOException, InterruptedException {
+        if (url == null || !"https".equalsIgnoreCase(url.getScheme())) {
+            throw new IOException("A URL de áudio autorizada precisa ser HTTPS.");
+        }
+        HttpRequest request = HttpRequest.newBuilder(url)
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "audio/mpeg, */*")
+                .GET()
+                .build();
+        HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            response.body().close();
+            throw new IOException("O áudio autorizado não pôde ser lido (HTTP " + response.statusCode() + ").");
+        }
+        return response.body();
+    }
+
+    /** Escolhe a URL de reprodução dentre os campos que a API de streams costuma devolver. */
+    static Optional<URI> escolherUrlDeStream(JsonNode root) {
+        String completa = textOrNull(root, "http_mp3_128_url");
+        String previa = textOrNull(root, "preview_mp3_128_url");
+        String escolhida = completa != null ? completa : previa;
+        if (escolhida == null) {
+            return Optional.empty();
+        }
+        try {
+            URI url = URI.create(escolhida);
+            if (!"https".equalsIgnoreCase(url.getScheme())) {
+                return Optional.empty();
+            }
+            return Optional.of(url);
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     private HttpResponse<String> sendSearch(URI uri, String token) throws IOException, InterruptedException {

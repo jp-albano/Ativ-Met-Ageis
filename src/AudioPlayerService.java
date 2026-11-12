@@ -9,7 +9,11 @@ import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
@@ -20,8 +24,9 @@ import java.util.function.LongSupplier;
  *
  * <p>Quando o arquivo existe e o mixer do Java consegue abri-lo, a posição vem do
  * {@link Clip}. O catálogo de demonstração aponta para MP3 que não estão no
- * repositório e o mixer padrão não lê MP3; nesse caso o player gera um tom PCM com
- * a duração da faixa, para tocar, pausar e parar continuarem funcionando. Se não
+ * repositório. Um MP3 local é decodificado e tocado. Uma faixa vinda da pesquisa
+ * pede o stream HTTPS autorizado pelo SoundCloud e toca sem gravar o arquivo.
+ * Se nada disso existir, o player gera um tom PCM com a duração da faixa. Se não
  * houver dispositivo de áudio, o avanço da posição usa o relógio injetado.</p>
  *
  * <p>O clip permanece aberto durante a pausa. Ele não é fechado dentro do
@@ -38,6 +43,7 @@ public class AudioPlayerService implements AutoCloseable {
     private static final float TAXA_DO_TOM = 22_050f;
 
     private final LongSupplier relogioNanos;
+    private final SoundCloudSearchService soundCloud;
     private Track faixaAtual;
     private Estado estado = Estado.PARADO;
     private Clip clip;
@@ -52,7 +58,7 @@ public class AudioPlayerService implements AutoCloseable {
     private long inicioDoTrechoNanos;
 
     public AudioPlayerService() {
-        this(System::nanoTime);
+        this(System::nanoTime, new SoundCloudSearchService());
     }
 
     /**
@@ -60,7 +66,13 @@ public class AudioPlayerService implements AutoCloseable {
      *                     com um {@link Clip} aberto, a posição vem do mixer
      */
     public AudioPlayerService(LongSupplier relogioNanos) {
+        this(relogioNanos, new SoundCloudSearchService());
+    }
+
+    /** Permite testes apontarem o cliente do SoundCloud para um servidor local. */
+    AudioPlayerService(LongSupplier relogioNanos, SoundCloudSearchService soundCloud) {
         this.relogioNanos = Objects.requireNonNull(relogioNanos, "relogioNanos");
+        this.soundCloud = Objects.requireNonNull(soundCloud, "soundCloud");
     }
 
     public synchronized void selecionar(Track faixa) {
@@ -315,19 +327,75 @@ public class AudioPlayerService implements AutoCloseable {
     }
 
     private AudioInputStream abrirFluxo() throws UnsupportedAudioFileException, IOException {
-        File arquivo = faixaAtual.audioFile();
-        if (arquivo.exists() && arquivo.isFile()) {
-            try {
-                motivoDaSubstituicao = null;
-                return AudioSystem.getAudioInputStream(arquivo);
-            } catch (UnsupportedAudioFileException e) {
-                motivoDaSubstituicao = "O formato de " + arquivo.getName()
-                        + " não é lido pelo mixer do Java (use WAV, AIFF ou AU).";
-            }
-        } else {
-            motivoDaSubstituicao = "Arquivo de áudio não encontrado: " + arquivo.getPath() + ".";
+        AudioInputStream local = tentarArquivoLocal();
+        if (local != null) {
+            return local;
+        }
+        AudioInputStream remoto = tentarSoundCloud();
+        if (remoto != null) {
+            return remoto;
+        }
+        if (motivoDaSubstituicao == null) {
+            motivoDaSubstituicao = "Arquivo de áudio não encontrado: " + faixaAtual.audioFile().getPath() + ".";
         }
         return tomDeDemonstracao();
+    }
+
+    private AudioInputStream tentarArquivoLocal() throws IOException {
+        File arquivo = faixaAtual.audioFile();
+        if (!arquivo.exists() || !arquivo.isFile()) {
+            motivoDaSubstituicao = "Arquivo de áudio não encontrado: " + arquivo.getPath() + ".";
+            return null;
+        }
+        try {
+            motivoDaSubstituicao = null;
+            return AudioSystem.getAudioInputStream(arquivo);
+        } catch (UnsupportedAudioFileException e) {
+            if (arquivo.getName().toLowerCase(Locale.ROOT).endsWith(".mp3")) {
+                try (InputStream mp3 = new FileInputStream(arquivo)) {
+                    AudioInputStream pcm = DecodificadorMp3.paraPcm(mp3);
+                    motivoDaSubstituicao = null;
+                    return pcm;
+                } catch (IOException falha) {
+                    motivoDaSubstituicao = "Não foi possível decodificar " + arquivo.getName() + ".";
+                    return null;
+                }
+            }
+            motivoDaSubstituicao = "O formato de " + arquivo.getName()
+                    + " não é lido pelo mixer do Java (use WAV, AIFF, AU ou MP3).";
+            return null;
+        }
+    }
+
+    /**
+     * Pede o stream autorizado e decodifica em memória. Não cria arquivo de áudio.
+     */
+    private AudioInputStream tentarSoundCloud() {
+        String origem = faixaAtual.origemId();
+        if (origem == null || !soundCloud.isConfigured()) {
+            return null;
+        }
+        try {
+            Optional<URI> url = soundCloud.urlDeStream(origem);
+            if (url.isEmpty()) {
+                motivoDaSubstituicao = "O SoundCloud não liberou o áudio desta faixa para este aplicativo.";
+                return null;
+            }
+            System.out.println("Buscando o áudio autorizado pelo SoundCloud...");
+            try (InputStream mp3 = soundCloud.baixarAudio(url.get())) {
+                AudioInputStream pcm = DecodificadorMp3.paraPcm(mp3);
+                motivoDaSubstituicao = null;
+                System.out.println("Reproduzindo o áudio do SoundCloud.");
+                return pcm;
+            }
+        } catch (IOException e) {
+            motivoDaSubstituicao = "Não foi possível obter o áudio no SoundCloud.";
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            motivoDaSubstituicao = "A busca do áudio foi interrompida.";
+            return null;
+        }
     }
 
     private void avisarSubstituicao(String motivo) {

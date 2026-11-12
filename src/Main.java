@@ -64,6 +64,8 @@ public class Main {
                 16. Parar
                 17. Ver progresso
                 18. Abrir submenu do player
+                ----- Descoberta -----
+                19. Pesquisar música online e adicionar ao catálogo
                 """);
     }
 
@@ -87,10 +89,11 @@ public class Main {
             case "16" -> pararMusica();
             case "17" -> player.exibirProgresso();
             case "18" -> player.abrirMenu(entrada);
+            case "19" -> pesquisarOnlineEAdicionar();
             case "0" -> {
                 return false;
             }
-            default -> System.out.println("Opção inválida. Digite um número de 0 a 18.");
+            default -> System.out.println("Opção inválida. Digite um número de 0 a 19.");
         }
         return true;
     }
@@ -334,6 +337,69 @@ public class Main {
     }
 
     // ------------------------------------------------------ descoberta online
+
+    private static void pesquisarOnlineEAdicionar() {
+        String termo = lerLinha("Nome da música ou do artista: ").strip();
+        if (termo.isEmpty()) {
+            System.out.println("Digite um nome para pesquisar.");
+            return;
+        }
+        try {
+            List<SoundCloudSearchService.SoundCloudTrack> resultados = descoberta.search(termo, RESULTADOS_ONLINE);
+            if (resultados.isEmpty()) {
+                System.out.println("Nenhuma música encontrada para \"" + termo + "\".");
+                return;
+            }
+            System.out.println("\n" + resultados.size() + " resultado(s):");
+            for (int i = 0; i < resultados.size(); i++) {
+                SoundCloudSearchService.SoundCloudTrack resultado = resultados.get(i);
+                System.out.println("  " + (i + 1) + ". " + resultado.title() + " - " + resultado.artist()
+                        + " (" + AudioPlayerService.formatarTempo((int) (resultado.durationMillis() / 1000)) + ")");
+                if (resultado.permalinkUrl() != null) {
+                    System.out.println("     " + resultado.permalinkUrl());
+                }
+            }
+            String texto = lerLinha("Número para adicionar ao catálogo (0 cancela): ").strip();
+            int indice;
+            try {
+                indice = Integer.parseInt(texto);
+            } catch (NumberFormatException e) {
+                System.out.println("Escolha inválida. Use o número mostrado na lista.");
+                return;
+            }
+            if (indice == 0) {
+                System.out.println("Inclusão cancelada.");
+                return;
+            }
+            if (indice < 1 || indice > resultados.size()) {
+                System.out.println("Número fora da lista.");
+                return;
+            }
+            SoundCloudSearchService.SoundCloudTrack escolhida = resultados.get(indice - 1);
+            InclusaoPorPesquisa.duplicata(catalogo.getAllTracks(), escolhida.title(), escolhida.artist())
+                    .ifPresentOrElse(
+                            existente -> System.out.println("Essa música já está no catálogo: " + existente.id()
+                                    + " — " + existente.title() + " - " + existente.artist()),
+                            () -> {
+                                Track nova = InclusaoPorPesquisa.criar(proximoIdDeMusica(), escolhida);
+                                catalogo.addTrack(nova);
+                                System.out.println("\"" + nova.title() + "\" adicionada ao catálogo (" + nova.id() + ").");
+                                if (escolhida.permalinkUrl() != null) {
+                                    System.out.println("Faixa original: " + escolhida.permalinkUrl());
+                                }
+                                System.out.println("Ao tocar, o player pede o áudio autorizado pelo SoundCloud. "
+                                        + "A música não é salva no projeto.");
+                            });
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            System.out.println(e.getMessage());
+        } catch (IOException e) {
+            System.out.println("Não foi possível pesquisar agora: " + e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.out.println("Pesquisa interrompida.");
+        }
+    }
+
 
     static String descreverResultadosSoundCloud(List<SoundCloudSearchService.SoundCloudTrack> resultados) {
         if (resultados.isEmpty()) {

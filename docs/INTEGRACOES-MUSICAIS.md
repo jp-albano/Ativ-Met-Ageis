@@ -30,6 +30,10 @@ for (var track : results) {
 
 A aplicação deve oferecer um link para a faixa original e respeitar permissões, disponibilidade e termos do provedor. A presença de uma URL de capa não transfere direitos sobre a imagem.
 
+No menu do terminal, a opção 19 pesquisa pelo nome e grava a faixa escolhida no catálogo local (`InclusaoPorPesquisa`). A inclusão copia título, artista, duração, o link e o id da faixa. Ela não grava o arquivo de áudio nem a capa.
+
+Ao tocar, `AudioPlayerService` chama `SoundCloudSearchService.urlDeStream`. A API devolve uma URL HTTPS temporária (`http_mp3_128_url` ou, se for o caso, `preview_mp3_128_url`). O player decodifica esse fluxo em memória e não cria cópia no disco. Se o aplicativo não tiver permissão de stream, a reprodução volta ao tom local.
+
 ## 2. Letras e verificação de correspondência (LRCLIB)
 
 `LyricsVerificationService` consulta título e artista e ranqueia candidatos com base em título, artista e duração. A duração é opcional no modelo: use `0` quando não estiver disponível.

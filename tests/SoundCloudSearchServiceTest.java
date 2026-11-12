@@ -1,4 +1,5 @@
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,6 +102,28 @@ class SoundCloudSearchServiceTest {
                 SoundCloudSearchService.SoundCloudException.class,
                 () -> service("fixo", null, null).search("song", 5));
         assertEquals(429, e.statusCode());
+    }
+
+    @Test
+    void pedeStreamHttpsAutorizadoPelaApi() throws Exception {
+        stub.createContext("/tracks/123/streams", exchange -> {
+            lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
+            byte[] body = "{\"preview_mp3_128_url\":\"http://inseguro.example/a.mp3\",\"http_mp3_128_url\":\"https://cdn.example/a.mp3\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        SoundCloudSearchService service = service("fixo", null, null);
+
+        assertEquals("https://cdn.example/a.mp3", service.urlDeStream("123").orElseThrow().toString());
+        assertEquals("OAuth fixo", lastAuthorization);
+    }
+
+    @Test
+    void ignoraStreamQueNaoSejaHttps() {
+        var json = JsonNodeFactory.instance.objectNode().put("http_mp3_128_url", "http://cdn.example/a.mp3");
+        assertTrue(SoundCloudSearchService.escolherUrlDeStream(json).isEmpty());
     }
 
     @Test

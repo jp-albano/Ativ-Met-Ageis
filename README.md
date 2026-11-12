@@ -9,7 +9,8 @@ Projeto acadêmico de catálogo musical para a matéria de Gerenciamento de Proj
 - **Descoberta externa:** busca faixas no SoundCloud e confere título, artista e letra (LRCLIB/MusicBrainz) pela API HTTP e pela interface web.
 - **Favoritos:** mantém faixas favoritas e impede duplicatas.
 - **Playlists:** cria playlists, lista e busca por ID e permite adicionar/remover IDs de faixas.
-- **Player:** toca, pausa, retoma e para a faixa selecionada. WAV, AIFF e AU usam o mixer do Java. Se o arquivo não existir ou for MP3, o terminal toca um tom com a duração cadastrada. Sem dispositivo de áudio, só o progresso avança.
+- **Player:** toca, pausa, retoma e para. WAV, AIFF, AU e MP3 locais saem pelo mixer do Java. Uma faixa adicionada pela pesquisa pede o stream HTTPS que o SoundCloud autorizar e toca sem gravar o arquivo. Se não houver arquivo nem stream, o terminal usa um tom com a duração cadastrada.
+- **Pesquisa online:** a opção 19 do menu busca o nome no SoundCloud e adiciona título, artista, duração e o id da faixa ao catálogo, com o link original.
 - **API HTTP:** `ApiServer` expõe catálogo, favoritos, playlists e descoberta em JSON (contrato em [`docs/API.md`](docs/API.md), decisão em [ADR-0002](docs/architecture/decisions/ADR-0002-api-http-java-frontend-next.md)).
 - **Testes:** testes automatizados com JUnit 5 para as regras principais e para a API.
 
