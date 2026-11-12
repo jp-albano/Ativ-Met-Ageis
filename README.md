@@ -14,7 +14,7 @@ Projeto acadêmico de catálogo musical para a matéria de Gerenciamento de Proj
 - **API HTTP:** `ApiServer` expõe catálogo, favoritos, playlists e descoberta em JSON (contrato em [`docs/API.md`](docs/API.md), decisão em [ADR-0002](docs/architecture/decisions/ADR-0002-api-http-java-frontend-next.md)).
 - **Testes:** testes automatizados com JUnit 5 para as regras principais e para a API.
 
-O menu de terminal (`Main`) continua cobrindo catálogo e playlists. A interface web em `frontend/` consome a API Java; ainda não implementa reprodução de áudio.
+O menu de terminal (`Main`) continua cobrindo catálogo e playlists. A interface web em `frontend/` consome a API Java e já abre com um catálogo de gravações em licença livre, tocadas no navegador a partir do Internet Archive. Também toca arquivos que a pessoa importa. A API não envia o stream do SoundCloud; essas faixas continuam abrindo no link original.
 
 > **Backend congelado.** A alteração que conectou a API foi a última mudança planejada no backend. Daqui em diante o trabalho é só no frontend. Se o frontend precisar de algo novo do backend, registre em [Pedidos para a equipe de backend](#pedidos-para-a-equipe-de-backend) em vez de alterar `src/` diretamente.
 
@@ -104,6 +104,7 @@ O frontend não altera `src/`. Pendências que dependem do backend ficam registr
 4. **Menu de descoberta no terminal:** as opções de busca no SoundCloud e verificação de letra sumiram do `Main` em um merge anterior (estavam no commit `aafd084`). A funcionalidade existe na API; restaurar no terminal é opcional.
 5. **Arquivos Java soltos na raiz** (`FavoriteSongsKeeper.java`, `LikedTracksRegistry (1).java`, `TrackCatalog.java`, `TrackSource.java`, `TrackNotFoundException.java`, `UnknownTrackException.java`): não são compilados pelo Maven e parte deles nem compila. Decidir se devem ser removidos ou integrados.
 6. **Pacotes nomeados:** os fontes continuam no pacote padrão (ver ADR-0001).
+7. **Stream para o player web:** a API não devolve a URL temporária que `SoundCloudSearchService.urlDeStream` já obtém. Sem esse endpoint, ou um proxy de áudio, o frontend não consegue tocar faixas do SoundCloud e só reproduz arquivos locais escolhidos no navegador.
 
 ## Se o grupo decidir não usar a API
 

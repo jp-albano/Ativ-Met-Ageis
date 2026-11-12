@@ -1,6 +1,10 @@
 # Sonora — interface web
 
-Interface responsiva em Next.js + React que consome a API Java do projeto: catálogo local com favoritos, busca de faixas no SoundCloud e conferência de letras/metadados (LRCLIB e MusicBrainz).
+Interface em Next.js e TypeScript que consome a API Java do projeto e toca música no navegador.
+
+O player cobre as funções básicas de um programa de música: catálogo pronto para tocar, play, pausa, anterior, próxima, barra de progresso, volume, aleatório, repetir e fila. As 15 faixas iniciais estão em [`src/data/free-catalog.ts`](src/data/free-catalog.ts): gravações com licença Creative Commons ou domínio público, reproduzidas direto do Internet Archive, sem copiar o arquivo para o repositório. A busca em `/music/search` procura mais faixas com o mesmo tipo de licença.
+
+Favoritos, playlists e o catálogo da API Java continuam disponíveis. A busca no SoundCloud e a conferência de letras ficam numa seção separada e não trazem o áudio dessa plataforma. Também é possível importar um arquivo local; ele fica só no IndexedDB deste navegador. Ver [ADR-0003](../docs/architecture/decisions/ADR-0003-player-web-arquivos-locais.md).
 
 ## Requisitos
 - Node.js 20.9 ou superior
@@ -33,4 +37,4 @@ npm run lint
 npm run build
 ```
 
-A UI identifica correspondências aproximadas e não certifica autoria/direitos autorais. A reprodução de áudio não está implementada; o link abre a faixa na plataforma de origem. Capas e letras são exibidas apenas quando o provedor retorna esses dados; respeite os termos e direitos aplicáveis.
+A UI identifica correspondências aproximadas e não certifica autoria/direitos autorais. O catálogo pronto transmite gravações cuja página de origem declara Creative Commons ou domínio público. Capas e letras do SoundCloud são exibidas apenas quando o provedor retorna esses dados. Um arquivo importado pelo usuário não é enviado ao servidor Java.
