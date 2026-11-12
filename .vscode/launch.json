@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Main (terminal)",
+      "request": "launch",
+      "mainClass": "Main",
+      "projectName": "music-catalog",
+      "console": "integratedTerminal"
+    }
+  ]
+}

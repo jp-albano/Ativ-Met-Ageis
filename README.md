@@ -31,7 +31,11 @@ Na raiz do repositório, execute:
 mvn clean verify
 ```
 
-O comando compila os fontes e executa os testes automatizados. Para iniciar o menu de terminal:
+O comando compila os fontes e executa os testes automatizados.
+
+No Visual Studio Code, abra a pasta do projeto e use **Run and Debug** com a configuração `Main (terminal)`. É preciso o Extension Pack for Java. No IntelliJ, abra o `pom.xml` ou o projeto e execute a configuração `Main`.
+
+Para iniciar o menu de terminal pelo Maven:
 
 ```bash
 mvn -q org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass=Main
