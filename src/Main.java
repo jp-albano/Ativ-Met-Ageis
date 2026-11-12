@@ -66,6 +66,7 @@ public class Main {
                 18. Abrir submenu do player
                 ----- Descoberta -----
                 19. Pesquisar música online e adicionar ao catálogo
+                0. Sair
                 """);
     }
 
@@ -214,17 +215,13 @@ public class Main {
         }
         listarCatalogo();
         String id = lerLinha("Id da música a adicionar: ").strip();
-        Optional<Track> musica = catalogo.findById(id);
-        if (musica.isEmpty()) {
-            System.out.println("Música não encontrada: " + id);
-            return;
-        }
-
-        Playlist playlist = escolhida.get();
-        if (playlist.adicionarFaixa(id)) {
-            System.out.println("\"" + musica.get().title() + "\" adicionada a \"" + playlist.getNome() + "\".");
-        } else {
-            System.out.println("Essa música já está na playlist.");
+        try {
+            Playlist atualizada = playlists.adicionarFaixa(escolhida.get().getId(), id, catalogo);
+            String idGravado = atualizada.getFaixaIds().get(atualizada.getQuantidadeFaixas() - 1);
+            Track musica = catalogo.findById(idGravado).orElseThrow();
+            System.out.println("\"" + musica.title() + "\" adicionada a \"" + atualizada.getNome() + "\".");
+        } catch (IllegalArgumentException e) {
+            System.out.println("Não foi possível adicionar: " + e.getMessage());
         }
     }
 
@@ -242,10 +239,11 @@ public class Main {
             catalogo.findById(faixaId).ifPresent(Main::imprimirMusica);
         }
         String id = lerLinha("Id da música a remover da playlist: ").strip();
-        if (playlist.removerFaixa(id)) {
-            System.out.println("Música " + id + " removida de \"" + playlist.getNome() + "\".");
-        } else {
-            System.out.println("Essa música não está na playlist.");
+        try {
+            Playlist atualizada = playlists.removerFaixa(playlist.getId(), id);
+            System.out.println("Música removida de \"" + atualizada.getNome() + "\".");
+        } catch (IllegalArgumentException e) {
+            System.out.println("Não foi possível remover: " + e.getMessage());
         }
     }
 

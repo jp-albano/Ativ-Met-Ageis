@@ -50,14 +50,23 @@ mvn -q org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass=Main
 
 > No Windows, se a API ou os testes falharem com `Unable to establish loopback connection`, o caminho da pasta temporária está impedindo o JDK de criar sockets locais. Defina `-Djdk.net.unixdomain.tmpdir=C:\Users\<seu-usuario>` (por exemplo, em `MAVEN_OPTS` ou `-DargLine=...` nos testes).
 
+## Branches
+
+- `main`: código original, já com as funções do grupo. Só recebe o que passou na branch de teste.
+- `integracao`: branch global para testar junto antes de ir para a `main`.
+- `joao-paulo`, `joao-vitor`, `lucas-belucci-bellini`, `miguel-flores` e `henriheian`: uma branch por participante, para alterar sem mexer direto no original.
+
 ## Organização atual
 
-- `src/`: classes Java do projeto.
-- `tests/`: testes automatizados JUnit.
-- `docs/`: relatórios e documentação técnica.
-- `frontend/`: aplicação web Next.js + React que consome a API Java.
-- `.github/workflows/frontend.yml`: build automatizado da interface web.
-- `.github/workflows/java-tests.yml`: compilação e testes no GitHub Actions.
+A raiz guarda só a configuração do projeto (`pom.xml`, `README.md`, `AGENTS.md`). O código que roda não fica mais solto nessa pasta.
+
+- `src/`: aplicação Java do terminal, da API e do player.
+- `tests/`: testes automatizados com JUnit 5.
+- `docs/`: regras, decisões de arquitetura, API e relatórios.
+- `frontend/`: interface web Next.js que consome a API Java.
+- `lib/`: bibliotecas usadas pelo IntelliJ (Jackson e JLayer). O Maven baixa as mesmas dependências pelo `pom.xml`.
+- `legado/prototipos/`: rascunhos antigos, fora do build.
+- `.github/workflows/`: compilação, testes e verificação do repositório.
 
 > **Nota:** os arquivos Java permanecem no pacote padrão por enquanto, para manter compatibilidade com a estrutura acadêmica existente. Uma migração para pacotes nomeados pode ser feita em uma alteração separada.
 
