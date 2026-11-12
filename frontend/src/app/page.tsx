@@ -12,6 +12,9 @@ import {
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
+const normalizeText = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+
 const duration = (ms: number) => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -27,7 +30,10 @@ export default function Home() {
   const [error, setError] = useState("");
   const [showLyrics, setShowLyrics] = useState(false);
   const [catalog, setCatalog] = useState<CatalogTrack[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [savingTrackId, setSavingTrackId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -42,7 +48,10 @@ export default function Home() {
   // Carrega o catálogo do backend Java uma vez; se a API estiver fora, mostra o aviso na seção.
   useEffect(() => {
     api.health().then(health => setApiOnline(health.status === "ok")).catch(() => setApiOnline(false));
-    api.listTracks().then(setCatalog).catch(e => setCatalogError(errorMessage(e, "Falha ao carregar o catálogo.")));
+    api.listTracks()
+      .then(setCatalog)
+      .catch(e => setCatalogError(errorMessage(e, "Falha ao carregar o catálogo.")))
+      .finally(() => setCatalogLoading(false));
     api.listPlaylists().then(setPlaylists).catch(e => setPlaylistError(errorMessage(e, "Falha ao carregar as playlists.")));
   }, []);
 
@@ -79,10 +88,9 @@ export default function Home() {
   }
 
   function isInCatalog(track: Track) {
-    const normalize = (value: string) => value.trim().toLocaleLowerCase();
     return catalog.some(item =>
-      normalize(item.title) === normalize(track.title) &&
-      normalize(item.artist) === normalize(track.artist),
+      normalizeText(item.title) === normalizeText(track.title) &&
+      normalizeText(item.artist) === normalizeText(track.artist),
     );
   }
 
@@ -166,6 +174,15 @@ export default function Home() {
     }
   }
 
+  const normalizedCatalogQuery = normalizeText(catalogQuery);
+  const visibleCatalog = catalog.filter(track =>
+    (!favoritesOnly || track.favorite) &&
+    (!normalizedCatalogQuery ||
+      normalizeText(track.title).includes(normalizedCatalogQuery) ||
+      normalizeText(track.artist).includes(normalizedCatalogQuery)),
+  );
+  const favoriteCount = catalog.filter(track => track.favorite).length;
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -215,9 +232,26 @@ export default function Home() {
         </section>}
 
         <section className="results-section" id="catalog">
-          <div className="section-heading"><div><span className="section-kicker">API JAVA • CATÁLOGO LOCAL</span><h2>Sua biblioteca</h2></div>{catalog.length > 0 && <span className="result-count">{catalog.length} FAIXAS</span>}</div>
+          <div className="section-heading"><div><span className="section-kicker">API JAVA • CATÁLOGO LOCAL</span><h2>Sua biblioteca</h2></div>{catalog.length > 0 && <span className="result-count">{visibleCatalog.length} DE {catalog.length} FAIXAS</span>}</div>
           {catalogError && <div className="notice" role="status"><span>ⓘ</span>{catalogError}</div>}
-          {catalog.length > 0 && <div className="recordings-list">{catalog.map(track => <div className="recording-row" key={track.id}><span>{track.title} <small>• {track.duration}</small></span><span>{track.artist} <button className="close-button" aria-pressed={track.favorite} aria-label={track.favorite ? `Desfavoritar ${track.title}` : `Favoritar ${track.title}`} onClick={() => toggleFavorite(track)}>{track.favorite ? "♥" : "♡"}</button></span></div>)}</div>}
+          {catalogLoading ? <div className="loading-line" role="status"><span className="spinner dark" /> Carregando biblioteca…</div> : catalog.length > 0 ? <>
+            <div className="catalog-tools">
+              <label className="catalog-search">
+                <span aria-hidden="true">⌕</span>
+                <input type="search" aria-label="Pesquisar na biblioteca" placeholder="Filtrar por música ou artista" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)} />
+              </label>
+              <div className="catalog-filters" role="group" aria-label="Filtrar biblioteca">
+                <button className={!favoritesOnly ? "active" : ""} aria-pressed={!favoritesOnly} onClick={() => setFavoritesOnly(false)}>
+                  Todas <span>{catalog.length}</span>
+                </button>
+                <button className={favoritesOnly ? "active" : ""} aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(true)}>
+                  Favoritas <span>{favoriteCount}</span>
+                </button>
+              </div>
+            </div>
+            {visibleCatalog.length > 0 ? <div className="recordings-list">{visibleCatalog.map(track => <div className="recording-row" key={track.id}><span>{track.title} <small>• {track.duration}</small></span><span>{track.artist} <button className="close-button" aria-pressed={track.favorite} aria-label={track.favorite ? `Desfavoritar ${track.title}` : `Favoritar ${track.title}`} onClick={() => toggleFavorite(track)}>{track.favorite ? "♥" : "♡"}</button></span></div>)}</div> :
+              <p className="catalog-empty" role="status">{favoritesOnly && favoriteCount === 0 ? "Você ainda não marcou nenhuma faixa como favorita." : "Nenhuma faixa corresponde a esse filtro."}</p>}
+          </> : !catalogError && <p className="catalog-empty">Seu catálogo ainda está vazio. Salve uma faixa descoberta para começar.</p>}
         </section>
 
         <section className="results-section" id="playlists">
