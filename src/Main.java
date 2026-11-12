@@ -59,13 +59,7 @@ public class Main {
                 12. Listar favoritas
                 ----- Player -----
                 13. Selecionar música para tocar
-                14. Tocar / retomar
-                15. Pausar
-                16. Parar
-                17. Ver progresso
-                18. Abrir submenu do player
-                ----- Descoberta -----
-                19. Pesquisar música online e adicionar ao catálogo
+                14. Abrir submenu do player
                 0. Sair
                 """);
     }
@@ -85,16 +79,11 @@ public class Main {
             case "11" -> alternarFavorita();
             case "12" -> listarFavoritas();
             case "13" -> selecionarMusicaParaTocar();
-            case "14" -> tocarMusica();
-            case "15" -> pausarMusica();
-            case "16" -> pararMusica();
-            case "17" -> player.exibirProgresso();
-            case "18" -> player.abrirMenu(entrada);
-            case "19" -> pesquisarOnlineEAdicionar();
+            case "14" -> player.abrirMenu(entrada);
             case "0" -> {
                 return false;
             }
-            default -> System.out.println("Opção inválida. Digite um número de 0 a 19.");
+            default -> System.out.println("Opção inválida. Digite um número de 0 a 14.");
         }
         return true;
     }
