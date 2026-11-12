@@ -1,7 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, type CatalogTrack, type DiscoveryTrack as Track, type Verification } from "@/lib/api";
+import {
+  api,
+  type CatalogTrack,
+  type DiscoveryTrack as Track,
+  type Playlist,
+  type PlaylistSummary,
+  type Verification,
+} from "@/lib/api";
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
@@ -21,10 +28,17 @@ export default function Home() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [catalog, setCatalog] = useState<CatalogTrack[]>([]);
   const [catalogError, setCatalogError] = useState("");
+  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
+  const [playlistName, setPlaylistName] = useState("");
+  const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [playlistError, setPlaylistError] = useState("");
 
   // Carrega o catálogo do backend Java uma vez; se a API estiver fora, mostra o aviso na seção.
   useEffect(() => {
     api.listTracks().then(setCatalog).catch(e => setCatalogError(errorMessage(e, "Falha ao carregar o catálogo.")));
+    api.listPlaylists().then(setPlaylists).catch(e => setPlaylistError(errorMessage(e, "Falha ao carregar as playlists.")));
   }, []);
 
   async function toggleFavorite(track: CatalogTrack) {
@@ -59,13 +73,77 @@ export default function Home() {
     } finally { setVerifying(false); }
   }
 
+  async function createPlaylist(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = playlistName.trim();
+    if (!name) return;
+    setPlaylistBusy(true);
+    setPlaylistError("");
+    try {
+      const created = await api.createPlaylist(name);
+      setPlaylists(current => [created, ...current]);
+      setActivePlaylist(created);
+      setPlaylistName("");
+    } catch (e) {
+      setPlaylistError(errorMessage(e, "Não foi possível criar a playlist."));
+    } finally {
+      setPlaylistBusy(false);
+    }
+  }
+
+  async function openPlaylist(id: number) {
+    setPlaylistLoading(true);
+    setPlaylistError("");
+    setActivePlaylist(null);
+    try {
+      setActivePlaylist(await api.getPlaylist(id));
+    } catch (e) {
+      setPlaylistError(errorMessage(e, "Não foi possível abrir a playlist."));
+    } finally {
+      setPlaylistLoading(false);
+    }
+  }
+
+  async function deletePlaylist(id: number) {
+    if (!window.confirm("Excluir esta playlist?")) return;
+    setPlaylistBusy(true);
+    setPlaylistError("");
+    try {
+      await api.deletePlaylist(id);
+      setPlaylists(current => current.filter(playlist => playlist.id !== id));
+      setActivePlaylist(current => current?.id === id ? null : current);
+    } catch (e) {
+      setPlaylistError(errorMessage(e, "Não foi possível excluir a playlist."));
+    } finally {
+      setPlaylistBusy(false);
+    }
+  }
+
+  async function togglePlaylistTrack(track: CatalogTrack) {
+    if (!activePlaylist) return;
+    const isIncluded = activePlaylist.tracks.some(item => item.id === track.id);
+    setPlaylistBusy(true);
+    setPlaylistError("");
+    try {
+      const updated = await api.setPlaylistTrack(activePlaylist.id, track.id, !isIncluded);
+      setActivePlaylist(updated);
+      setPlaylists(current => current.map(playlist =>
+        playlist.id === updated.id ? { ...playlist, trackCount: updated.trackCount } : playlist,
+      ));
+    } catch (e) {
+      setPlaylistError(errorMessage(e, "Não foi possível atualizar a playlist."));
+    } finally {
+      setPlaylistBusy(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#" aria-label="Sonora início"><span className="brand-mark"><i /><i /><i /></span><span>sonora<span className="brand-dot">.</span></span></a>
         <div className="side-label">SUA BIBLIOTECA</div>
         <a className="side-link active" href="#discover"><span className="side-icon">⌕</span> Descobrir música</a>
-        <a className="side-link" href="#results"><span className="side-icon">♫</span> Pesquisas recentes</a>
+        <a className="side-link" href="#playlists"><span className="side-icon">♫</span> Playlists</a>
         <a className="side-link" href="#catalog"><span className="side-icon">♥</span> Sua biblioteca</a>
         <div className="sidebar-bottom"><div className="equalizer"><i /><i /><i /><i /><i /><i /><i /></div><p>Encontre a música.<br /><strong>Descubra a história.</strong></p><span>Pesquisa musical • projeto acadêmico</span></div>
       </aside>
@@ -98,6 +176,60 @@ export default function Home() {
           <div className="section-heading"><div><span className="section-kicker">API JAVA • CATÁLOGO LOCAL</span><h2>Sua biblioteca</h2></div>{catalog.length > 0 && <span className="result-count">{catalog.length} FAIXAS</span>}</div>
           {catalogError && <div className="notice" role="status"><span>ⓘ</span>{catalogError}</div>}
           {catalog.length > 0 && <div className="recordings-list">{catalog.map(track => <div className="recording-row" key={track.id}><span>{track.title} <small>• {track.duration}</small></span><span>{track.artist} <button className="close-button" aria-pressed={track.favorite} aria-label={track.favorite ? `Desfavoritar ${track.title}` : `Favoritar ${track.title}`} onClick={() => toggleFavorite(track)}>{track.favorite ? "♥" : "♡"}</button></span></div>)}</div>}
+        </section>
+
+        <section className="results-section" id="playlists">
+          <div className="section-heading"><div><span className="section-kicker">ORGANIZE SEUS SONS</span><h2>Playlists</h2></div>{playlists.length > 0 && <span className="result-count">{playlists.length} PLAYLISTS</span>}</div>
+          {playlistError && <div className="notice" role="status"><span>ⓘ</span>{playlistError}</div>}
+          <div className="playlist-layout">
+            <div className="playlist-list" aria-label="Suas playlists">
+              <form className="playlist-create-form" onSubmit={createPlaylist}>
+                <label className="visually-hidden" htmlFor="playlist-name">Nome da nova playlist</label>
+                <input id="playlist-name" value={playlistName} onChange={event => setPlaylistName(event.target.value)} placeholder="Nome da nova playlist" maxLength={100} />
+                <button type="submit" disabled={playlistBusy || !playlistName.trim()}>Criar</button>
+              </form>
+              {playlists.length === 0 ? <p className="playlist-empty">Crie sua primeira playlist para organizar as faixas.</p> : playlists.map(playlist =>
+                <button
+                  className={activePlaylist?.id === playlist.id ? "playlist-item active" : "playlist-item"}
+                  key={playlist.id}
+                  onClick={() => openPlaylist(playlist.id)}
+                  disabled={playlistLoading || playlistBusy}
+                  aria-current={activePlaylist?.id === playlist.id ? "true" : undefined}
+                >
+                  <span>{playlist.name}</span><small>{playlist.trackCount} faixas</small>
+                </button>,
+              )}
+            </div>
+            <div className="playlist-detail" aria-busy={playlistLoading || playlistBusy}>
+              {playlistLoading ? <div className="loading-line"><span className="spinner dark" /> Abrindo playlist…</div> : activePlaylist ? <>
+                <div className="playlist-detail-heading">
+                  <div><span className="section-kicker">{activePlaylist.trackCount} FAIXAS</span><h3>{activePlaylist.name}</h3></div>
+                  <button className="close-button" onClick={() => deletePlaylist(activePlaylist.id)} disabled={playlistBusy} aria-label={`Excluir playlist ${activePlaylist.name}`}>×</button>
+                </div>
+                {activePlaylist.missingTrackIds.length > 0 && <p className="warning-text">{activePlaylist.missingTrackIds.length} faixa(s) da playlist não estão mais no catálogo.</p>}
+                <div className="playlist-track-list">
+                  {activePlaylist.tracks.length === 0 ? <p className="playlist-empty">Ainda não há faixas nesta playlist.</p> : activePlaylist.tracks.map(track =>
+                    <div className="playlist-track-row" key={track.id}>
+                      <span>{track.title}<small>{track.artist}</small></span>
+                      <button className="playlist-action" onClick={() => togglePlaylistTrack(track)} disabled={playlistBusy}>Remover</button>
+                    </div>,
+                  )}
+                </div>
+                <div className="playlist-catalog">
+                  <h4>Adicionar do catálogo</h4>
+                  {catalog.length === 0 ? <p className="playlist-empty">O catálogo está vazio.</p> : catalog.map(track => {
+                    const included = activePlaylist.tracks.some(item => item.id === track.id);
+                    return <div className="playlist-track-row" key={track.id}>
+                      <span>{track.title}<small>{track.artist}</small></span>
+                      <button className="playlist-action" onClick={() => togglePlaylistTrack(track)} disabled={playlistBusy || included} aria-pressed={included}>
+                        {included ? "Adicionada" : "Adicionar"}
+                      </button>
+                    </div>;
+                  })}
+                </div>
+              </> : <div className="playlist-placeholder"><span>♫</span><p>Crie ou selecione uma playlist para começar.</p></div>}
+            </div>
+          </div>
         </section>
         <footer><a className="footer-brand" href="#">sonora<span>.</span></a><span>Feito para explorar música com curiosidade.</span><span className="footer-status"><i /> FONTES EXTERNAS</span></footer>
       </section>
