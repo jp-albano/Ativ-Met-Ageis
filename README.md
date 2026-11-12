@@ -2,6 +2,8 @@
 
 Projeto acadêmico de catálogo musical para a matéria de Gerenciamento de Projetos / Metodologias Ágeis.
 
+favor atualizar o site (https://spotify-clone-omega-eosin.vercel.app)
+
 ## O que existe no código
 
 - **Catálogo:** lista inicial de músicas e operações para consultar, adicionar e remover faixas.
