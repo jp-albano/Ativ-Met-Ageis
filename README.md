@@ -54,7 +54,7 @@ mvn -q org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass=Main
 
 - `main`: código original, já com as funções do grupo. Só recebe o que passou na branch de teste.
 - `integracao`: branch global para testar junto antes de ir para a `main`.
-- `joao-paulo`, `joao-vitor`, `lucas-belucci-bellini`, `miguel-flores` e `henriheian`: uma branch por participante, para alterar sem mexer direto no original.
+- `joao-paulo`, `joao-vitor`, `lucas-belucci-bellini`, `miguel`, `henrique` e `caue`: uma branch por participante, para alterar sem mexer direto no original.
 
 ## Organização atual
 
