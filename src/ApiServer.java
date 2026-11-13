@@ -236,14 +236,21 @@ public final class ApiServer {
         return notFound();
     }
 
-    /** /api/discovery/search e /api/discovery/verify (provedores externos). */
+    /** /api/discovery/search, /api/discovery/resolve e /api/discovery/verify (provedores externos). */
     private Response discovery(String method, List<String> rest, Map<String, String> query)
             throws InterruptedException {
         if (rest.size() != 2) return notFound();
         if (!method.equals("GET")) return methodNotAllowed("GET");
         return switch (rest.get(1)) {
-            case "search" -> ok(discovery.search(query.get("q"),
-                    parseIntParam(query.get("limit"), DiscoveryApi.DEFAULT_SEARCH_LIMIT, "limit")));
+            case "search" -> {
+                String nextHref = query.get("next_href");
+                if (nextHref != null && !nextHref.isBlank()) {
+                    yield ok(discovery.searchPaged(null, 0, nextHref));
+                }
+                yield ok(discovery.searchPaged(query.get("q"),
+                        parseIntParam(query.get("limit"), DiscoveryApi.DEFAULT_SEARCH_LIMIT, "limit"), null));
+            }
+            case "resolve" -> ok(discovery.resolve(query.get("url")));
             case "verify" -> ok(discovery.verify(query.get("title"), query.get("artist"),
                     parseDuration(query.get("duration"))));
             default -> notFound();
