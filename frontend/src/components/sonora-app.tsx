@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { licenseLabel, readyCatalog, streamUrl, type FreeTrack } from "@/data/free-catalog";
 import { api, ApiError, type CatalogTrack, type DiscoveryTrack, type Playlist, type PlaylistSummary, type Verification } from "@/lib/api";
 import { clampDuration, coverColor, formatTime, titleFromFileName } from "@/lib/format";
 import { clearCatalogLink, listLocalTracks, readDuration, removeByCatalogId, removeLocalTrack, saveLocalAudio, type LocalAudio } from "@/lib/local-audio";
+import { applyIfCurrent, createRequestTracker } from "@/lib/request-tracking";
 import { PlayerProvider, usePlayer, type PlayableTrack } from "@/components/player-provider";
 
 type View = "home" | "search" | "library" | "liked" | { kind: "playlist"; id: number };
@@ -465,7 +467,7 @@ function SideButton({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function Cover({ label, artworkUrl }: { label: string; artworkUrl?: string | null }) {
-  if (artworkUrl) return <img className="cover" src={artworkUrl} alt="" />;
+  if (artworkUrl) return <Image className="cover" src={artworkUrl} alt="" width={80} height={80} unoptimized />;
   return <span className="cover generated" style={{ background: coverColor(label) }} aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span>;
 }
 
@@ -547,6 +549,9 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
   const [freeError, setFreeError] = useState("");
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<DiscoveryTrack[]>([]);
+  const searchRequest = useMemo(() => createRequestTracker(), []);
+  const freeSearchRequest = useMemo(() => createRequestTracker(), []);
+  const verificationRequest = useMemo(() => createRequestTracker(), []);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<DiscoveryTrack | null>(null);
@@ -559,33 +564,40 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
     event.preventDefault();
     const term = query.trim();
     if (!term) return;
+    const requestId = searchRequest.start();
     setSearching(true);
     setError("");
     setSelected(null);
     setVerification(null);
     try {
       const found = await api.searchDiscovery(term);
+      if (!searchRequest.isCurrent(requestId)) return;
       setTracks(found);
       if (!found.length) setError("Nenhuma faixa encontrada. Tente outro título ou artista.");
     } catch (reason) {
+      if (!searchRequest.isCurrent(requestId)) return;
       setTracks([]);
       setError(errorMessage(reason, "Falha na busca."));
     } finally {
-      setSearching(false);
+      if (searchRequest.isCurrent(requestId)) setSearching(false);
     }
   }
 
   async function verify(track: DiscoveryTrack) {
+    const requestId = verificationRequest.start();
     setSelected(track);
     setVerification(null);
     setShowLyrics(false);
     setVerifying(true);
     try {
-      setVerification(await api.verifyTrack(track.title, track.artist, track.durationMillis / 1000));
+      const verification = await api.verifyTrack(track.title, track.artist, track.durationMillis / 1000);
+      if (!verificationRequest.isCurrent(requestId)) return;
+      setVerification(verification);
     } catch (reason) {
+      if (!verificationRequest.isCurrent(requestId)) return;
       setError(errorMessage(reason, "Falha ao conferir a faixa."));
     } finally {
-      setVerifying(false);
+      if (verificationRequest.isCurrent(requestId)) setVerifying(false);
     }
   }
 
@@ -612,19 +624,22 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
     event.preventDefault();
     const value = freeQuery.trim();
     if (value.length < 2) return;
+    const requestId = freeSearchRequest.start();
     setFreeSearching(true);
     setFreeError("");
     try {
       const response = await fetch(`/music/search?q=${encodeURIComponent(value)}`);
+      if (!freeSearchRequest.isCurrent(requestId)) return;
       const data = (await response.json()) as { tracks?: FreeTrack[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Falha na busca do acervo livre.");
       const tracks = Array.isArray(data.tracks) ? data.tracks.filter(track => track && typeof track.identifier === "string" && typeof track.fileName === "string" && typeof track.title === "string" && typeof track.artist === "string") : [];
-      setRemoteTracks(tracks);
+      applyIfCurrent(freeSearchRequest, requestId, () => setRemoteTracks(tracks));
     } catch (reason) {
+      if (!freeSearchRequest.isCurrent(requestId)) return;
       setRemoteTracks([]);
       setFreeError(errorMessage(reason, "Não foi possível ampliar a busca. O catálogo local continua disponível."));
     } finally {
-      setFreeSearching(false);
+      if (freeSearchRequest.isCurrent(requestId)) setFreeSearching(false);
     }
   }
 

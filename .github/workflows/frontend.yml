@@ -1,4 +1,4 @@
-name: Frontend Build
+name: Frontend quality and tests
 
 on:
   pull_request:
@@ -10,20 +10,42 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: frontend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  quality:
+    name: lint, test and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: npm run build
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependency tree
+        run: npm ci
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Run lint with zero warnings allowed
+        run: npm run lint
+
+      - name: Build production bundle
+        run: npm run build
