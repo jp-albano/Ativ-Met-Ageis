@@ -386,6 +386,8 @@ function Shell() {
             onDeleteCatalog={track => void deleteCatalogTrack(track)}
             onCatalogCreated={() => void reloadApi()}
             onError={setActionError}
+            onPlayFree={playFree}
+            playingFreeId={player.playing ? player.current?.audioId : undefined}
           />
         )}
         {view === "liked" && (
@@ -697,7 +699,7 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
   );
 }
 
-function LibraryView({ localTracks, catalog, playlists, audioByCatalog, currentId, currentCatalogId, onPlayLocal, onPlayCatalog, onAttach, onFavorite, onAddToPlaylist, onDeleteLocal, onDeleteCatalog, onCatalogCreated, onError }: {
+function LibraryView({ localTracks, catalog, playlists, audioByCatalog, currentId, currentCatalogId, onPlayLocal, onPlayCatalog, onAttach, onFavorite, onAddToPlaylist, onDeleteLocal, onDeleteCatalog, onCatalogCreated, onError, onPlayFree, playingFreeId }: {
   localTracks: LocalAudio[];
   catalog: CatalogTrack[];
   playlists: PlaylistSummary[];
@@ -713,6 +715,8 @@ function LibraryView({ localTracks, catalog, playlists, audioByCatalog, currentI
   onDeleteCatalog: (track: CatalogTrack) => void;
   onCatalogCreated: () => void;
   onError: (message: string) => void;
+  onPlayFree: (list: FreeTrack[], track: FreeTrack) => void;
+  playingFreeId?: string;
 }) {
   const [filter, setFilter] = useState("");
   const [title, setTitle] = useState("");
@@ -738,6 +742,16 @@ function LibraryView({ localTracks, catalog, playlists, audioByCatalog, currentI
 
   return (
     <div className="view">
+      <section>
+        <div className="section-head">
+          <div>
+            <h2>Prontas para tocar</h2>
+            <p className="hint">{readyCatalog.length} faixas já salvas. Clique em uma ou em Tocar tudo.</p>
+          </div>
+          <button className="primary" type="button" onClick={() => onPlayFree(readyCatalog, readyCatalog[0])}>Tocar tudo</button>
+        </div>
+        <FreeTrackList tracks={readyCatalog} playingId={playingFreeId} onPlay={track => onPlayFree(readyCatalog, track)} />
+      </section>
       <form className="inline-form" onSubmit={event => void createCatalog(event)}>
         <input aria-label="Título da faixa" maxLength={200} value={title} onChange={event => setTitle(event.target.value)} placeholder="Título" required />
         <input aria-label="Artista" maxLength={160} value={artist} onChange={event => setArtist(event.target.value)} placeholder="Artista" required />
