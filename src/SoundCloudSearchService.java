@@ -509,7 +509,7 @@ public final class SoundCloudSearchService {
     }
 
     /** Valida URLs externas para prevenir SSRF antes de repassar à API interna. */
-    private static URI validateExternalUri(String rawUrl) {
+    private URI validateExternalUri(String rawUrl) {
         try {
             URI uri = URI.create(rawUrl);
             String scheme = uri.getScheme();
@@ -521,7 +521,11 @@ public final class SoundCloudSearchService {
                 throw new IllegalArgumentException("URL inválida: host ausente.");
             }
             String lowerHost = host.toLowerCase(Locale.ROOT);
-            boolean allowed = ALLOWED_HOSTS.contains(lowerHost)
+            String baseHost = URI.create(apiBase).getHost();
+            boolean isConfiguredBase = baseHost != null && baseHost.equalsIgnoreCase(lowerHost);
+
+            boolean allowed = isConfiguredBase
+                    || ALLOWED_HOSTS.contains(lowerHost)
                     || ALLOWED_HOSTS.stream().anyMatch(h -> lowerHost.endsWith("." + h));
             if (!allowed) {
                 throw new IllegalArgumentException("Apenas links do domínio soundcloud.com são permitidos.");

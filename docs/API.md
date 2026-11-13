@@ -18,7 +18,19 @@ Cliente tipado do frontend: [`frontend/src/lib/api.ts`](../frontend/src/lib/api.
 Track            = { id: string, title: string, artist: string, durationSeconds: number, duration: "mm:ss", favorite: boolean }
 PlaylistSummary  = { id: number, name: string, trackCount: number }
 Playlist         = PlaylistSummary & { tracks: Track[], missingTrackIds: string[] }
-DiscoveryTrack   = { id: string, title: string, artist: string, artworkUrl: string|null, permalinkUrl: string, durationMillis: number }
+PlaybackState    = "PLAYABLE" | "PREVIEW" | "BLOCKED"
+DiscoveryTrack   = {
+  id: string,
+  title: string,
+  artist: string,
+  artworkUrl: string|null,
+  permalinkUrl: string,
+  durationMillis: number,
+  playbackState?: PlaybackState,
+  streamable?: boolean,
+  waveformUrl?: string|null
+}
+DiscoveryPage    = { tracks: DiscoveryTrack[], nextHref?: string }
 Verification     = { lyrics: Lyrics|null, recordings: Recording[], warnings: string[] }
 Lyrics           = { title, artist, album|null, duration, verified, matchType: "strong"|"approximate", message, plainLyrics|null, syncedLyrics|null, instrumental, source }
 Recording        = { id, title, artist, album|null, length: number|null /* ms */ }
@@ -39,7 +51,8 @@ Recording        = { id, title, artist, album|null, length: number|null /* ms */
 | POST | `/api/playlists` | `{name}` | `201 Playlist` |
 | GET / DELETE | `/api/playlists/{id}` | — | `Playlist` / `204` · `404` |
 | PUT / DELETE | `/api/playlists/{id}/tracks/{trackId}` | — | `{changed, playlist: Playlist}` · `404` playlist ou faixa |
-| GET | `/api/discovery/search?q=&limit=` | — | `{tracks: DiscoveryTrack[]}` (`limit` 1–50, padrão 20) |
+| GET | `/api/discovery/search?q=&limit=&next_href=` | — | `DiscoveryPage` (`limit` 1–50, padrão 20; `next_href` para próxima página) |
+| GET | `/api/discovery/resolve?url=` | — | `DiscoveryTrack` (`url` permalink canônico do SoundCloud) · `400`/`404` |
 | GET | `/api/discovery/verify?title=&artist=&duration=` | — | `Verification` (`duration` em segundos, opcional) |
 
 ### Status específicos da descoberta
@@ -48,3 +61,4 @@ Recording        = { id, title, artist, album|null, length: number|null /* ms */
 - `429`: limite de requisições do SoundCloud atingido.
 - `502`: falha ou indisponibilidade do provedor.
 - Na verificação, a falha de uma fonte vira item em `warnings` sem apagar o resultado da outra.
+- Na resolução (`/resolve`), URLs que não sejam do domínio `soundcloud.com` ou de faixas inexistentes retornam `400` ou `404`.
