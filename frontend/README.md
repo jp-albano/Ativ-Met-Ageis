@@ -1,6 +1,10 @@
 # Sonora — interface web
 
-Interface responsiva em Next.js + React que consome a API Java do projeto: catálogo local com favoritos, busca por título/artista e filtro de favoritas, playlists (criação e organização de faixas do catálogo), busca de faixas no SoundCloud, opção para salvar resultados no catálogo e conferência de letras/metadados (LRCLIB e MusicBrainz). A API mantém catálogo e playlists em memória; eles são perdidos quando o backend reinicia.
+Interface em Next.js e TypeScript que consome a API Java do projeto e toca música no navegador.
+
+O player cobre as funções básicas de um programa de música: catálogo pronto para tocar, play, pausa, anterior, próxima, barra de progresso, volume, aleatório, repetir e fila. As 30 faixas iniciais estão em [`src/data/free-catalog.ts`](src/data/free-catalog.ts): gravações com licença Creative Commons ou domínio público, reproduzidas direto do Internet Archive, sem copiar o arquivo para o repositório. A busca em `/music/search` procura mais faixas com o mesmo tipo de licença.
+
+Favoritos, playlists e o catálogo da API Java continuam disponíveis. A busca no SoundCloud e a conferência de letras ficam numa seção separada e não trazem o áudio dessa plataforma. Também é possível importar um arquivo local; ele fica só no IndexedDB deste navegador. Ver [ADR-0003](../docs/architecture/decisions/ADR-0003-player-web-arquivos-locais.md).
 
 ## Requisitos
 - Node.js 20.9 ou superior
@@ -21,9 +25,7 @@ Abra http://localhost:3000.
 ## Como o frontend fala com a API
 
 - O navegador chama apenas caminhos relativos `/api/...`. O `next.config.ts` repassa essas requisições para `BACKEND_URL` (padrão `http://127.0.0.1:8080`).
-- Na Vercel, configure `BACKEND_URL` com a URL absoluta HTTPS da API Java (por exemplo, `https://api.exemplo.com`) nas variáveis de ambiente de Production e Preview. O frontend adiciona `/api` ao endereço e mostra no rodapé se a API respondeu.
-- A Vercel hospeda o Next.js; a API Java precisa continuar rodando em um serviço separado e acessível pelo servidor da Vercel. O build na Vercel falha se `BACKEND_URL` não estiver definida.
-- **Atenção:** a API atual não tem autenticação e mantém os dados em memória. Não a exponha publicamente sem antes proteger o acesso; o frontend sozinho não substitui autenticação. Para busca no SoundCloud, configure também `SOUNDCLOUD_CLIENT_ID` e `SOUNDCLOUD_CLIENT_SECRET` somente no ambiente do backend.
+- Na Vercel, defina `BACKEND_URL` com a URL absoluta HTTPS da API Java. Sem esse valor o build falha. A API não tem autenticação e não deve ser exposta publicamente.
 - Use sempre o cliente tipado [`src/lib/api.ts`](src/lib/api.ts); ele converte erros e falta de conexão em mensagens prontas para exibir.
 - O contrato completo das rotas está em [`docs/API.md`](../docs/API.md).
 - O frontend não guarda segredos: as credenciais do SoundCloud ficam só no backend. Nunca use variáveis `NEXT_PUBLIC_*` para segredos.
@@ -36,4 +38,4 @@ npm run lint
 npm run build
 ```
 
-A UI identifica correspondências aproximadas e não certifica autoria/direitos autorais. A reprodução de áudio não está implementada; o link abre a faixa na plataforma de origem. Capas e letras são exibidas apenas quando o provedor retorna esses dados; respeite os termos e direitos aplicáveis.
+A UI identifica correspondências aproximadas e não certifica autoria/direitos autorais. O catálogo pronto transmite gravações cuja página de origem declara Creative Commons ou domínio público. Capas e letras do SoundCloud são exibidas apenas quando o provedor retorna esses dados. Um arquivo importado pelo usuário não é enviado ao servidor Java.

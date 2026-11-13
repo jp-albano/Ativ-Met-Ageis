@@ -93,4 +93,4 @@ System.out.println("Metadados independentes: "
 
 ## 6. O que ainda não está implementado
 
-A interface web exibe resultados, capas, links e letras através da API HTTP (`DiscoveryApi`, rotas `/api/discovery/*` em [`docs/API.md`](API.md)). Ainda não foram implementados player de áudio, login de usuário, cache persistente, busca com múltiplos provedores ou fluxo de reprodução semelhante ao Spotify.
+A interface web exibe resultados, capas, links e letras através da API HTTP (`DiscoveryApi`, rotas `/api/discovery/*` em [`docs/API.md`](API.md)). O player do navegador abre com um catálogo de gravações em Creative Commons ou domínio público e também toca arquivos locais importados pela pessoa (ver [ADR-0003](architecture/decisions/ADR-0003-player-web-arquivos-locais.md)). Ainda não existem login de usuário, cache persistente no servidor nem reprodução do stream do SoundCloud na web: a API não expõe `urlDeStream`.
