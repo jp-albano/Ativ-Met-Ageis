@@ -19,6 +19,9 @@ export type CatalogTrack = {
 export type PlaylistSummary = { id: number; name: string; trackCount: number };
 export type Playlist = PlaylistSummary & { tracks: CatalogTrack[]; missingTrackIds: string[] };
 
+/** Estado de reprodução retornado pela API oficial do SoundCloud. */
+export type PlaybackState = "PLAYABLE" | "PREVIEW" | "BLOCKED";
+
 /** Resultado de busca no SoundCloud. */
 export type DiscoveryTrack = {
   id: string;
@@ -27,6 +30,15 @@ export type DiscoveryTrack = {
   artworkUrl: string | null;
   permalinkUrl: string;
   durationMillis: number;
+  playbackState?: PlaybackState;
+  streamable?: boolean;
+  waveformUrl?: string | null;
+};
+
+/** Resultado paginado da descoberta. */
+export type DiscoverySearchResult = {
+  tracks: DiscoveryTrack[];
+  nextHref?: string | null;
 };
 
 export type Lyrics = {
@@ -116,6 +128,17 @@ export const api = {
 
   searchDiscovery: (query: string, limit = 20) =>
     request<{ tracks: DiscoveryTrack[] }>(`/api/discovery/search?q=${q(query)}&limit=${limit}`).then(r => r.tracks),
+
+  searchDiscoveryPaged: (query: string, limit = 20, nextHref?: string) =>
+    request<DiscoverySearchResult>(
+      nextHref
+        ? `/api/discovery/search?next_href=${q(nextHref)}`
+        : `/api/discovery/search?q=${q(query)}&limit=${limit}`,
+    ),
+
+  resolveTrack: (url: string) =>
+    request<DiscoveryTrack>(`/api/discovery/resolve?url=${q(url)}`),
+
   verifyTrack: (title: string, artist: string, durationSeconds: number) =>
     request<Verification>(
       `/api/discovery/verify?title=${q(title)}&artist=${q(artist)}&duration=${Math.round(durationSeconds)}`,

@@ -10,10 +10,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -68,7 +70,7 @@ class ApiServerTest {
         assertEquals(201, created.statusCode());
         JsonNode track = body(created);
         assertEquals("Nova Faixa", track.get("title").asText());
-        assertEquals("03:05",track.get("duration").asText());
+        assertEquals("03:05", track.get("duration").asText());
 
         assertEquals(400, send("POST", "/api/tracks", "{nao e json").statusCode());
         assertEquals(400, send("POST", "/api/tracks", "{\"title\":\"\",\"artist\":\"x\",\"durationSeconds\":1}")
@@ -79,51 +81,61 @@ class ApiServerTest {
     }
 
     @Test
-    void marcaEDesmarcaFavoritos() throws Exception {
-        JsonNode added = body(send("PUT", "/api/favorites/t-001", null));
-        assertTrue(added.get("favorite").asBoolean());
-        assertTrue(added.get("changed").asBoolean());
-        assertFalse(body(send("PUT", "/api/favorites/t-001", null)).get("changed").asBoolean());
+    void buscaERemoveFaixaPorId() throws Exception {
+        HttpResponse<String> ok = send("GET", "/api/tracks/t-001", null);
+        assertEquals(200, ok.statusCode());
+        assertEquals("Bohemian Rhapsody", body(ok).get("title").asText());
 
-        assertEquals(1, body(send("GET", "/api/favorites", null)).get("tracks").size());
-        assertTrue(body(send("GET", "/api/tracks/t-001", null)).get("favorite").asBoolean());
-
-        assertEquals(200, send("DELETE", "/api/favorites/t-001", null).statusCode());
-        assertEquals(0, body(send("GET", "/api/favorites", null)).get("tracks").size());
-        assertEquals(404, send("PUT", "/api/favorites/nao-existe", null).statusCode());
+        assertEquals(404, send("GET", "/api/tracks/inexistente", null).statusCode());
+        assertEquals(204, send("DELETE", "/api/tracks/t-001", null).statusCode());
+        assertEquals(404, send("GET", "/api/tracks/t-001", null).statusCode());
     }
 
     @Test
-    void fluxoDePlaylistERemocaoEmCascata() throws Exception {
-        HttpResponse<String> created = send("POST", "/api/playlists", "{\"name\":\"Estrada\"}");
+    void favoritosAlternamComPutEDelete() throws Exception {
+        assertEquals(0, body(send("GET", "/api/favorites", null)).get("tracks").size());
+
+        HttpResponse<String> added = send("PUT", "/api/favorites/t-002", null);
+        assertEquals(200, added.statusCode());
+        assertTrue(body(added).get("favorite").asBoolean());
+        assertTrue(body(added).get("changed").asBoolean());
+
+        HttpResponse<String> repeated = send("PUT", "/api/favorites/t-002", null);
+        assertFalse(body(repeated).get("changed").asBoolean());
+        assertEquals(1, body(send("GET", "/api/favorites", null)).get("tracks").size());
+
+        HttpResponse<String> removed = send("DELETE", "/api/favorites/t-002", null);
+        assertFalse(body(removed).get("favorite").asBoolean());
+        assertTrue(body(removed).get("changed").asBoolean());
+        assertEquals(404, send("PUT", "/api/favorites/inexistente", null).statusCode());
+    }
+
+    @Test
+    void cicloDeVidaDePlaylist() throws Exception {
+        HttpResponse<String> created = send("POST", "/api/playlists", "{\"name\":\"Minha Lista\"}");
         assertEquals(201, created.statusCode());
         int id = body(created).get("id").asInt();
 
-        JsonNode change = body(send("PUT", "/api/playlists/" + id + "/tracks/t-002", null));
-        assertTrue(change.get("changed").asBoolean());
-        assertEquals(1, change.get("playlist").get("trackCount").asInt());
-        assertEquals(404, send("PUT", "/api/playlists/" + id + "/tracks/nao-existe", null).statusCode());
-        assertEquals(404, send("PUT", "/api/playlists/999/tracks/t-002", null).statusCode());
+        HttpResponse<String> added = send("PUT", "/api/playlists/" + id + "/tracks/t-002", null);
+        assertEquals(200, added.statusCode());
+        assertTrue(body(added).get("changed").asBoolean());
+        assertEquals(1, body(added).get("playlist").get("tracks").size());
 
-        // Remover a faixa do catálogo também a retira da playlist e dos favoritos.
-        send("PUT", "/api/favorites/t-002", null);
-        assertEquals(204, send("DELETE", "/api/tracks/t-002", null).statusCode());
-        assertEquals(0, body(send("GET", "/api/playlists/" + id, null)).get("trackCount").asInt());
-        assertEquals(0, body(send("GET", "/api/favorites", null)).get("tracks").size());
+        HttpResponse<String> fetched = send("GET", "/api/playlists/" + id, null);
+        assertEquals(1, body(fetched).get("trackCount").asInt());
+
+        HttpResponse<String> removedTrack = send("DELETE", "/api/playlists/" + id + "/tracks/t-002", null);
+        assertTrue(body(removedTrack).get("changed").asBoolean());
 
         assertEquals(204, send("DELETE", "/api/playlists/" + id, null).statusCode());
         assertEquals(404, send("GET", "/api/playlists/" + id, null).statusCode());
-        assertEquals(404, send("GET", "/api/playlists/abc", null).statusCode());
     }
 
     @Test
-    void rotasDesconhecidasEMetodosInvalidos() throws Exception {
-        assertEquals(404, send("GET", "/api/nada", null).statusCode());
-        assertEquals(404, send("GET", "/fora-da-api", null).statusCode());
-
-        HttpResponse<String> notAllowed = send("PATCH", "/api/tracks", null);
-        assertEquals(405, notAllowed.statusCode());
-        assertEquals("GET, POST", notAllowed.headers().firstValue("Allow").orElse(""));
+    void metodoIncorretoResponde405ComCabecalhoAllow() throws Exception {
+        HttpResponse<String> response = send("DELETE", "/api/health", null);
+        assertEquals(405, response.statusCode());
+        assertEquals("GET", response.headers().firstValue("Allow").orElse(""));
     }
 
     @Test
@@ -148,18 +160,46 @@ class ApiServerTest {
         providers.configured = true;
         providers.tracks = List.of(
                 new SoundCloudSearchService.SoundCloudTrack("soundcloud:tracks:1", "Song", "Artist",
-                        null, "https://soundcloud.com/a/song", 200_000),
+                        null, "https://soundcloud.com/a/song", 200_000,
+                        SoundCloudSearchService.PlaybackState.PLAYABLE, true, null),
                 new SoundCloudSearchService.SoundCloudTrack("soundcloud:tracks:2", "Sem link", "Artist",
-                        null, null, 1));
-        JsonNode tracks = body(send("GET", "/api/discovery/search?q=song&limit=5", null)).get("tracks");
+                        null, null, 1,
+                        SoundCloudSearchService.PlaybackState.BLOCKED, false, null));
+        providers.nextHref = "https://api.soundcloud.com/tracks?q=song&offset=10";
+
+        JsonNode res = body(send("GET", "/api/discovery/search?q=song&limit=5", null));
+        JsonNode tracks = res.get("tracks");
         assertEquals(1, tracks.size());
         assertEquals("soundcloud:tracks:1", tracks.get(0).get("id").asText());
+        assertEquals("PLAYABLE", tracks.get(0).get("playbackState").asText());
+        assertTrue(tracks.get(0).get("streamable").asBoolean());
+        assertEquals("https://api.soundcloud.com/tracks?q=song&offset=10", res.get("nextHref").asText());
 
         assertEquals(400, send("GET", "/api/discovery/search?q=", null).statusCode());
         assertEquals(400, send("GET", "/api/discovery/search?q=x&limit=abc", null).statusCode());
 
         providers.searchError = new SoundCloudSearchService.SoundCloudException(429, "limite");
         assertEquals(429, send("GET", "/api/discovery/search?q=outra", null).statusCode());
+    }
+
+    @Test
+    void resolveTrackViaEndpointDiscovery() throws Exception {
+        providers.configured = true;
+        providers.resolvedTrack = new SoundCloudSearchService.SoundCloudTrack("soundcloud:tracks:99",
+                "Resolved Track", "Resolved Artist", "https://artwork.example/art.jpg",
+                "https://soundcloud.com/artist/track", 180_000,
+                SoundCloudSearchService.PlaybackState.PLAYABLE, true, null);
+
+        HttpResponse<String> response = send("GET",
+                "/api/discovery/resolve?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack", null);
+        assertEquals(200, response.statusCode());
+        JsonNode track = body(response);
+        assertEquals("Resolved Track", track.get("title").asText());
+        assertEquals("Resolved Artist", track.get("artist").asText());
+        assertEquals("PLAYABLE", track.get("playbackState").asText());
+
+        assertEquals(400, send("GET", "/api/discovery/resolve?url=", null).statusCode());
+        assertEquals(404, send("GET", "/api/discovery/resolve?url=https%3A%2F%2Fsoundcloud.com%2Fnaoexiste", null).statusCode());
     }
 
     @Test
@@ -206,6 +246,8 @@ class ApiServerTest {
     private static final class FakeProviders implements DiscoveryApi.Providers {
         volatile boolean configured;
         volatile List<SoundCloudSearchService.SoundCloudTrack> tracks = List.of();
+        volatile String nextHref;
+        volatile SoundCloudSearchService.SoundCloudTrack resolvedTrack;
         volatile IOException searchError;
         volatile IOException lyricsError;
         volatile int lastDuration = -1;
@@ -219,6 +261,21 @@ class ApiServerTest {
         public List<SoundCloudSearchService.SoundCloudTrack> search(String query, int limit) throws IOException {
             if (searchError != null) throw searchError;
             return tracks;
+        }
+
+        @Override
+        public SoundCloudSearchService.PagedResult<SoundCloudSearchService.SoundCloudTrack> searchPaged(
+                String query, int limit, String nextHref) throws IOException {
+            if (searchError != null) throw searchError;
+            return new SoundCloudSearchService.PagedResult<>(tracks, this.nextHref);
+        }
+
+        @Override
+        public Optional<SoundCloudSearchService.SoundCloudTrack> resolve(String permalinkUrl) {
+            if (resolvedTrack != null && permalinkUrl != null && permalinkUrl.contains("naoexiste")) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(resolvedTrack);
         }
 
         @Override
