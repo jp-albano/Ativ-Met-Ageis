@@ -93,7 +93,7 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
     throw new Error("NO_TOKEN");
   }
 
-  const lifetimeMs = (data.expires_in ?? 3600) * 1000;
+  const lifetimeMs = data.expires_in !== undefined ? data.expires_in * 1000 : DEFAULT_TOKEN_LIFETIME_MS;
   cachedToken = data.access_token;
   cachedTokenExpiresAt = now + Math.max(0, lifetimeMs - TOKEN_REFRESH_MARGIN_MS);
   return cachedToken;
