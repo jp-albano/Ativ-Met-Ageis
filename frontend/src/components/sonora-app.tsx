@@ -8,8 +8,25 @@ import { clampDuration, coverColor, formatTime, titleFromFileName } from "@/lib/
 import { clearCatalogLink, listLocalTracks, readDuration, removeByCatalogId, removeLocalTrack, saveLocalAudio, type LocalAudio } from "@/lib/local-audio";
 import { applyIfCurrent, createRequestTracker } from "@/lib/request-tracking";
 import { PlayerProvider, usePlayer, type PlayableTrack } from "@/components/player-provider";
+import { Icon, type IconName } from "@/components/icons";
 
 type View = "home" | "search" | "library" | "liked" | { kind: "playlist"; id: number };
+
+/**
+ * Situação da API Java mostrada no selo do topo.
+ * "checking" existe para não anunciar "fora do ar" antes da primeira resposta.
+ */
+type ApiStatus = "checking" | "online" | "offline";
+
+/** Atalhos da busca: o rótulo é o que aparece; o termo é o que vai para a busca (o acervo está em inglês). */
+const SEARCH_CHIPS: { label: string; term: string }[] = [
+  { label: "Tudo", term: "" },
+  { label: "Piano", term: "piano" },
+  { label: "Blues", term: "blues" },
+  { label: "Bossa", term: "bossa" },
+  { label: "Violão", term: "guitar" },
+  { label: "Ambiente", term: "ambient" },
+];
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
@@ -53,6 +70,7 @@ function Shell() {
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [apiNotice, setApiNotice] = useState("");
+  const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState("");
   const [playlistName, setPlaylistName] = useState("");
@@ -71,8 +89,10 @@ function Shell() {
       setFavorites(liked);
       setPlaylists(lists);
       setApiNotice("");
+      setApiStatus("online");
     } catch (error) {
       setApiNotice(errorMessage(error, "A API Java não respondeu. Dá para tocar os áudios já importados neste navegador."));
+      setApiStatus("offline");
     }
   }, []);
 
@@ -99,8 +119,11 @@ function Shell() {
         setCatalog(tracks);
         setFavorites(liked);
         setPlaylists(lists);
+        setApiStatus("online");
       } catch (error) {
-        if (!cancelled) setApiNotice(errorMessage(error, "A API Java não respondeu. Dá para tocar os áudios já importados neste navegador."));
+        if (cancelled) return;
+        setApiNotice(errorMessage(error, "A API Java não respondeu. Dá para tocar os áudios já importados neste navegador."));
+        setApiStatus("offline");
       }
     })();
     return () => {
@@ -178,6 +201,30 @@ function Shell() {
     const start = Math.max(0, queue.findIndex(item => item.audioId === track.id));
     if (player.current?.audioId === track.id) player.toggle();
     else player.playQueue(queue, start);
+  }
+
+  /**
+   * Botão "Aleatório": liga o modo aleatório do player (se estiver desligado)
+   * e começa por uma faixa sorteada, para a primeira música também variar.
+   */
+  function playFreeShuffled(list: FreeTrack[]) {
+    if (list.length === 0) return;
+    if (!player.shuffle) player.toggleShuffle();
+    player.playQueue(list.map(freeToPlayable), Math.floor(Math.random() * list.length));
+  }
+
+  /** Mesmo comportamento de {@link playFreeShuffled}, para faixas do catálogo da API com áudio local. */
+  function playCatalogShuffled(list: CatalogTrack[]) {
+    const playable = list.flatMap(item => {
+      const local = audioByCatalog.get(item.id);
+      return local ? [toPlayable(local)] : [];
+    });
+    if (playable.length === 0) {
+      setActionError("Nenhuma faixa desta lista tem áudio neste navegador. Use “Anexar áudio” para escolher o arquivo.");
+      return;
+    }
+    if (!player.shuffle) player.toggleShuffle();
+    player.playQueue(playable, Math.floor(Math.random() * playable.length));
   }
 
   function playLocal(track: LocalAudio, list: LocalAudio[]) {
@@ -300,75 +347,69 @@ function Shell() {
           sonora<span className="brand-dot">.</span>
         </button>
         <nav className="side-nav" aria-label="Seções">
-          <SideButton active={view === "home"} onClick={() => setView("home")}>Início</SideButton>
-          <SideButton active={view === "search"} onClick={() => setView("search")}>Buscar</SideButton>
-          <SideButton active={view === "library"} onClick={() => setView("library")}>Biblioteca</SideButton>
-          <SideButton active={view === "liked"} onClick={() => setView("liked")}>Favoritas</SideButton>
+          <SideButton icon="home" active={view === "home"} onClick={() => setView("home")}>Início</SideButton>
+          <SideButton icon="search" active={view === "search"} onClick={() => setView("search")}>Buscar</SideButton>
+          <SideButton icon="library" active={view === "library"} onClick={() => setView("library")}>Biblioteca</SideButton>
+          <SideButton icon="heart" active={view === "liked"} onClick={() => setView("liked")}>Favoritas</SideButton>
         </nav>
-        <form className="playlist-form" onSubmit={event => void createPlaylist(event)}>
-          <label htmlFor="playlist-name">Nova playlist</label>
-          <div>
-            <input id="playlist-name" maxLength={120} value={playlistName} onChange={event => setPlaylistName(event.target.value)} placeholder="Nome da playlist" />
-            <button type="submit" disabled={!playlistName.trim()}>Criar</button>
-          </div>
-        </form>
         <div className="side-label">Playlists</div>
         <div className="playlist-scroll">
-          {playlists.length === 0 && <p className="side-empty">Nenhuma playlist na API.</p>}
+          {playlists.length === 0 && <p className="side-empty">{apiStatus === "offline" ? "Playlists ficam na API, que está fora do ar." : "Nenhuma playlist ainda."}</p>}
           {playlists.map(item => (
             <button
               key={item.id}
               type="button"
               className={playlistId === item.id ? "playlist-link active" : "playlist-link"}
+              aria-current={playlistId === item.id ? "page" : undefined}
               onClick={() => setView({ kind: "playlist", id: item.id })}
             >
               <span>{item.name}</span>
-              <small>{item.trackCount}</small>
+              <small aria-label={`${item.trackCount} faixas`}>{item.trackCount}</small>
             </button>
           ))}
         </div>
-        <button className="import-button" type="button" onClick={openImport}>Importar áudios</button>
+        <form className="playlist-form" onSubmit={event => void createPlaylist(event)}>
+          <label htmlFor="playlist-name">Nova playlist</label>
+          <div>
+            <input id="playlist-name" maxLength={120} value={playlistName} onChange={event => setPlaylistName(event.target.value)} placeholder="Nome da playlist" />
+            <button type="submit" disabled={!playlistName.trim()} aria-label="Criar playlist"><Icon name="plus" size={18} /></button>
+          </div>
+        </form>
+        <button className="import-button" type="button" onClick={openImport}>
+          <Icon name="upload" size={18} />
+          Importar do computador
+        </button>
       </aside>
 
       <div className="content" id="conteudo">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Player</p>
-            <h1>{titleFor(view, playlist)}</h1>
-          </div>
-          <button className="text-button" type="button" onClick={openImport}>Adicionar músicas</button>
+          <h1>{titleFor(view, playlist)}</h1>
+          <ApiStatusChip status={apiStatus} />
         </header>
         {notice && (
           <div className="notice" role="status">
             <p>{notice}</p>
-            <button type="button" onClick={() => { setActionError(""); player.dismissError(); }}>Fechar</button>
+            <button type="button" onClick={() => { setActionError(""); setApiNotice(""); player.dismissError(); }}>Fechar</button>
           </div>
         )}
         {busy && <p className="busy" role="status">{busy}</p>}
 
         {view === "home" && (
-          <>
-            <section className="view">
-              <div className="section-head">
-                <div>
-                  <h2>Catálogo pronto</h2>
-                  <p className="hint">{readyCatalog.length} faixas em Creative Commons ou domínio público. O áudio toca daqui, sem baixar arquivo para o projeto.</p>
-                </div>
-                <button type="button" className="primary" onClick={() => playFree(readyCatalog, readyCatalog[0])}>Tocar tudo</button>
-              </div>
-              <FreeTrackList tracks={readyCatalog} playingId={player.playing ? player.current?.audioId : undefined} onPlay={track => playFree(readyCatalog, track)} />
-            </section>
           <HomeView
             localTracks={localTracks}
             favorites={favorites}
             playlists={playlists}
+            apiStatus={apiStatus}
             currentId={player.current?.audioId}
+            playingId={player.playing ? player.current?.audioId : undefined}
+            onPlayAll={() => playFree(readyCatalog, readyCatalog[0])}
+            onShuffle={() => playFreeShuffled(readyCatalog)}
+            onPlayFree={track => playFree(readyCatalog, track)}
             onPlay={playLocal}
             onOpenPlaylist={id => setView({ kind: "playlist", id })}
             onImport={openImport}
             onOpenLiked={() => setView("liked")}
           />
-          </>
         )}
         {view === "search" && <SearchView onSaved={reloadApi} onPlayFree={playFree} playingId={player.playing ? player.current?.audioId : undefined} />}
         {view === "library" && (
@@ -410,16 +451,22 @@ function Shell() {
         {typeof view === "object" && (
           <PlaylistView
             playlist={playlist}
+            catalog={catalog}
             audioByCatalog={audioByCatalog}
-            playlists={playlists}
             currentCatalogId={player.playing ? player.current?.catalogId : undefined}
-            onPlayAll={() => playlist && playCatalogList(playlist.tracks, playlist.tracks[0]?.id ?? "")}
+            onPlayAll={() => {
+              if (!playlist) return;
+              // Começa pela primeira faixa que tem áudio aqui, não só pela primeira da lista.
+              const first = playlist.tracks.find(item => audioByCatalog.has(item.id)) ?? playlist.tracks[0];
+              playCatalogList(playlist.tracks, first?.id ?? "");
+            }}
+            onShuffle={() => playlist && playCatalogShuffled(playlist.tracks)}
             onPlay={start => playlist && playCatalogList(playlist.tracks, start)}
             onAttach={openAttach}
             onFavorite={track => void toggleFavorite(track)}
             onRemove={trackId => void removeFromPlaylist(trackId)}
             onDelete={() => void deletePlaylist(view.id)}
-            onAddToPlaylist={(playlistTarget, trackId) => void addToPlaylist(playlistTarget, trackId)}
+            onAdd={trackId => void addToPlaylist(view.id, trackId)}
           />
         )}
       </div>
@@ -462,8 +509,32 @@ function titleFor(view: View, playlist: Playlist | null): string {
   return playlist?.name ?? "Playlist";
 }
 
-function SideButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
-  return <button type="button" className={active ? "side-link active" : "side-link"} aria-current={active ? "page" : undefined} onClick={onClick}>{children}</button>;
+function SideButton({ icon, active, onClick, children }: { icon: IconName; active: boolean; onClick: () => void; children: string }) {
+  return (
+    <button type="button" className={active ? "side-link active" : "side-link"} aria-current={active ? "page" : undefined} onClick={onClick}>
+      <Icon name={icon} />
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Selo de status da API Java no topo.
+ * Quando a API cai, o texto lembra que o catálogo livre continua tocando,
+ * porque ele vem do Internet Archive e não depende do backend.
+ */
+function ApiStatusChip({ status }: { status: ApiStatus }) {
+  const label = status === "online"
+    ? "API Java conectada"
+    : status === "offline"
+      ? "API fora do ar · catálogo livre segue tocando"
+      : "Conectando à API…";
+  return (
+    <p className={`api-chip ${status}`} role="status">
+      <span className="api-dot" aria-hidden="true" />
+      {label}
+    </p>
+  );
 }
 
 function Cover({ label, artworkUrl }: { label: string; artworkUrl?: string | null }) {
@@ -471,11 +542,21 @@ function Cover({ label, artworkUrl }: { label: string; artworkUrl?: string | nul
   return <span className="cover generated" style={{ background: coverColor(label) }} aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span>;
 }
 
-function HomeView({ localTracks, favorites, playlists, currentId, onPlay, onOpenPlaylist, onImport, onOpenLiked }: {
+/**
+ * Tela inicial: destaque do catálogo livre, atalhos da biblioteca e a lista do catálogo.
+ * O catálogo livre fica em primeiro lugar porque é o único conteúdo que toca
+ * mesmo com a API Java fora do ar.
+ */
+function HomeView({ localTracks, favorites, playlists, apiStatus, currentId, playingId, onPlayAll, onShuffle, onPlayFree, onPlay, onOpenPlaylist, onImport, onOpenLiked }: {
   localTracks: LocalAudio[];
   favorites: CatalogTrack[];
   playlists: PlaylistSummary[];
+  apiStatus: ApiStatus;
   currentId?: string;
+  playingId?: string;
+  onPlayAll: () => void;
+  onShuffle: () => void;
+  onPlayFree: (track: FreeTrack) => void;
   onPlay: (track: LocalAudio, list: LocalAudio[]) => void;
   onOpenPlaylist: (id: number) => void;
   onImport: () => void;
@@ -483,18 +564,48 @@ function HomeView({ localTracks, favorites, playlists, currentId, onPlay, onOpen
 }) {
   return (
     <div className="view">
-      {localTracks.length === 0 ? (
-        <section>
-          <h2>Arquivos do computador</h2>
-          <p className="hint">O catálogo acima já toca. Se quiser, também dá para importar um MP3, WAV, OGG ou M4A deste computador.</p>
-          <button className="text-button" type="button" onClick={onImport}>Importar áudios</button>
-        </section>
-      ) : (
-        <section>
-          <div className="section-head">
-            <h2>No seu computador</h2>
-            <button type="button" className="text-button" onClick={() => onPlay(localTracks[0], localTracks)}>Tocar tudo</button>
-          </div>
+      <section className="hero" aria-labelledby="hero-title">
+        <p className="eyebrow">Catálogo livre</p>
+        <h2 id="hero-title">Música para tocar agora</h2>
+        <p className="hint">{readyCatalog.length} gravações em Creative Commons ou domínio público, tocadas direto do Internet Archive. Não precisa da API nem de arquivo no computador.</p>
+        <div className="pill-row">
+          <button type="button" className="pill primary" onClick={onPlayAll}><Icon name="play" size={18} />Tocar tudo</button>
+          <button type="button" className="pill" onClick={onShuffle}><Icon name="shuffle" size={18} />Aleatório</button>
+        </div>
+      </section>
+
+      <section aria-labelledby="library-title">
+        <h2 id="library-title">Sua biblioteca</h2>
+        <div className="home-row">
+          <button type="button" className="summary-card" onClick={onOpenLiked}>
+            <span className="summary-icon" aria-hidden="true"><Icon name="heart" filled /></span>
+            <span>Favoritas</span>
+            <small>{favorites.length} {favorites.length === 1 ? "faixa" : "faixas"}</small>
+          </button>
+          {playlists.slice(0, 4).map(item => (
+            <button type="button" className="summary-card" key={item.id} onClick={() => onOpenPlaylist(item.id)}>
+              <Cover label={item.name} />
+              <span>{item.name}</span>
+              <small>{item.trackCount} {item.trackCount === 1 ? "faixa" : "faixas"}</small>
+            </button>
+          ))}
+          <button type="button" className="summary-card local" onClick={localTracks.length ? () => onPlay(localTracks[0], localTracks) : onImport}>
+            <span className="summary-icon" aria-hidden="true"><Icon name={localTracks.length ? "play" : "upload"} /></span>
+            <span>No seu computador</span>
+            <small>{localTracks.length ? `${localTracks.length} ${localTracks.length === 1 ? "arquivo" : "arquivos"} · tocar` : "Importar MP3, WAV, OGG ou M4A"}</small>
+          </button>
+        </div>
+        {apiStatus === "offline" && <p className="hint">Favoritas e playlists aparecem quando a API Java voltar.</p>}
+      </section>
+
+      <section aria-labelledby="catalog-title">
+        <h2 id="catalog-title">Catálogo</h2>
+        <FreeTrackList tracks={readyCatalog} playingId={playingId} onPlay={onPlayFree} />
+      </section>
+
+      {localTracks.length > 0 && (
+        <section aria-labelledby="local-title">
+          <h2 id="local-title">No seu computador</h2>
           <div className="card-grid">
             {localTracks.map(track => (
               <article className={currentId === track.id ? "song-card current" : "song-card"} key={track.id}>
@@ -508,36 +619,34 @@ function HomeView({ localTracks, favorites, playlists, currentId, onPlay, onOpen
           </div>
         </section>
       )}
-      <section className="home-row">
-        <button type="button" className="summary-card" onClick={onOpenLiked}>
-          <span>Favoritas</span>
-          <strong>{favorites.length}</strong>
-        </button>
-        {playlists.slice(0, 4).map(item => (
-          <button type="button" className="summary-card" key={item.id} onClick={() => onOpenPlaylist(item.id)}>
-            <span>{item.name}</span>
-            <strong>{item.trackCount} faixas</strong>
-          </button>
-        ))}
-      </section>
     </div>
   );
 }
 
+/**
+ * Lista numerada do catálogo livre: número, capa, título/artista, licença e duração.
+ * O link "Fonte" fica fora do botão da linha para não aninhar elementos interativos.
+ */
 function FreeTrackList({ tracks, playingId, onPlay }: { tracks: FreeTrack[]; playingId?: string; onPlay: (track: FreeTrack) => void }) {
   return (
     <ol className="catalog-list">
-      {tracks.map((track, index) => (
-        <li key={track.id}>
-          <button type="button" className={playingId === track.id ? "catalog-row current" : "catalog-row"} onClick={() => onPlay(track)} aria-label={`Tocar ${track.title}`}>
-            <span className="num">{String(index + 1).padStart(2, "0")}</span>
-            <span className="catalog-title"><strong>{track.title}</strong><small>{track.artist}</small></span>
-            <span className="meta license">{licenseLabel(track.license)}</span>
-            <span className="meta">{formatTime(track.durationSeconds)}</span>
-          </button>
-          <a href={track.sourceUrl} target="_blank" rel="noreferrer">Fonte</a>
-        </li>
-      ))}
+      {tracks.map((track, index) => {
+        const playing = playingId === track.id;
+        return (
+          <li key={track.id}>
+            <button type="button" className={playing ? "catalog-row current" : "catalog-row"} onClick={() => onPlay(track)} aria-label={playing ? `Pausar ${track.title}` : `Tocar ${track.title}`}>
+              <span className="num" aria-hidden="true">{playing ? <Icon name="pause" size={16} /> : String(index + 1).padStart(2, "0")}</span>
+              <Cover label={track.title} />
+              <span className="catalog-title"><strong>{track.title}</strong><small>{track.artist}</small></span>
+              <span className="license-pill">{licenseLabel(track.license)}</span>
+              <span className="meta time">{formatTime(track.durationSeconds)}</span>
+            </button>
+            <a className="icon-link" href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={`Fonte e licença de ${track.title} (abre em nova aba)`}>
+              <Icon name="external" size={18} />
+            </a>
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -622,7 +731,28 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
 
   async function searchFree(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = freeQuery.trim();
+    await runFreeSearch(freeQuery);
+  }
+
+  /**
+   * Atalho de gênero: preenche a busca e já procura no acervo remoto.
+   * "Tudo" limpa o texto e os resultados remotos, voltando ao catálogo pronto.
+   */
+  function pickChip(term: string) {
+    setFreeQuery(term);
+    if (!term) {
+      freeSearchRequest.start(); // invalida uma busca remota ainda em andamento
+      setRemoteTracks([]);
+      setFreeError("");
+      setFreeSearching(false);
+      return;
+    }
+    void runFreeSearch(term);
+  }
+
+  /** Busca gravações livres no Internet Archive via rota `/music/search` do próprio Next. */
+  async function runFreeSearch(raw: string) {
+    const value = raw.trim();
     if (value.length < 2) return;
     const requestId = freeSearchRequest.start();
     setFreeSearching(true);
@@ -643,74 +773,125 @@ function SearchView({ onSaved, onPlayFree, playingId }: { onSaved: () => Promise
     }
   }
 
+  const activeChip = SEARCH_CHIPS.find(chip => chip.term === term)?.term;
+
   return (
     <div className="view">
-      <form className="search-form" onSubmit={event => void searchFree(event)}>
+      <form className="search-form pill-search" onSubmit={event => void searchFree(event)}>
         <label className="sr-only" htmlFor="free-query">Pesquisar no catálogo livre</label>
+        <Icon name="search" />
         <input id="free-query" maxLength={80} value={freeQuery} onChange={event => setFreeQuery(event.target.value)} placeholder="Buscar no catálogo: piano, blues, guitar…" />
         <button type="submit" disabled={freeSearching || freeQuery.trim().length < 2}>{freeSearching ? "Buscando…" : "Buscar"}</button>
       </form>
-      <p className="hint">A lista de baixo já toca. A busca também procura mais gravações com licença livre no Internet Archive.</p>
-      {freeError && <p className="inline-error" role="status">{freeError}</p>}
-      {freeResults.length === 0 ? <p className="hint">Nada com esse texto no catálogo pronto. Tente piano, blues ou guitar.</p> : (
-        <>
-          <div className="section-head">
-            <h2>{freeResults.length} faixas</h2>
-            <button type="button" className="primary" onClick={() => onPlayFree(freeResults, freeResults[0])}>Tocar</button>
-          </div>
-          <FreeTrackList tracks={freeResults} playingId={playingId} onPlay={track => onPlayFree(freeResults, track)} />
-        </>
-      )}
-      <details className="more-search">
-        <summary>Buscar metadados no SoundCloud</summary>
-      <form className="search-form" onSubmit={event => void search(event)}>
-        <label className="sr-only" htmlFor="search-query">Pesquisar música ou artista</label>
-        <input id="search-query" maxLength={120} value={query} onChange={event => setQuery(event.target.value)} placeholder="Título ou artista no SoundCloud" />
-        <button type="submit" disabled={searching || !query.trim()}>{searching ? "Buscando…" : "Buscar"}</button>
-      </form>
-      <p className="hint">Essa busca não traz o áudio do SoundCloud. Ela serve para conferir letra e créditos e, se quiser, salvar o título no catálogo da API.</p>
-      {error && <p className="inline-error" role="status">{error}</p>}
-      <div className="card-grid">
-        {tracks.map(track => (
-          <article className="song-card" key={track.id}>
-            <Cover label={track.title} artworkUrl={track.artworkUrl} />
-            <h3>{track.title}</h3>
-            <p>{track.artist}</p>
-            <p className="meta">{formatTime(track.durationMillis / 1000)}</p>
-            <div className="card-actions">
-              <button type="button" onClick={() => void verify(track)}>Conferir</button>
-              <button type="button" onClick={() => void save(track)}>{savedIds.includes(track.id) ? "Salva" : "Salvar"}</button>
-              <a href={track.permalinkUrl} target="_blank" rel="noreferrer">Abrir original</a>
-            </div>
-          </article>
+      <div className="chip-row" role="group" aria-label="Atalhos de gênero">
+        {SEARCH_CHIPS.map(chip => (
+          <button key={chip.label} type="button" className="chip" aria-pressed={activeChip === chip.term} onClick={() => pickChip(chip.term)}>
+            {chip.label}
+          </button>
         ))}
       </div>
-      {selected && (
-        <section className="verify-panel" aria-live="polite">
+
+      <div className="search-layout">
+        <section aria-labelledby="free-results-title">
           <div className="section-head">
-            <h2>{selected.title}</h2>
-            <button type="button" onClick={() => { setSelected(null); setVerification(null); }}>Fechar</button>
+            <div>
+              <h2 id="free-results-title">{freeResults.length} {freeResults.length === 1 ? "faixa" : "faixas"}</h2>
+              <p className="hint">Tudo aqui toca. A busca também procura mais gravações de licença livre no Internet Archive.</p>
+            </div>
+            {freeResults.length > 0 && <button type="button" className="pill primary" onClick={() => onPlayFree(freeResults, freeResults[0])}><Icon name="play" size={18} />Tocar</button>}
           </div>
-          <p>{selected.artist}</p>
-          {verifying && <p className="busy">Conferindo letra e metadados…</p>}
-          {verification && (
-            <>
-              <p>{verification.lyrics ? verification.lyrics.message : "Nenhuma letra correspondente."}</p>
-              <p>{verification.recordings.length} registro(s) no MusicBrainz para comparação.</p>
-              {verification.warnings.map(warning => <p className="inline-error" key={warning}>{warning}</p>)}
-              {verification.lyrics?.plainLyrics && (
-                <>
-                  <button type="button" onClick={() => setShowLyrics(show => !show)}>{showLyrics ? "Ocultar letra" : "Ver letra"}</button>
-                  {showLyrics && <pre className="lyrics">{verification.lyrics.plainLyrics}</pre>}
-                </>
-              )}
-              <p className="hint">A conferência não certifica autoria nem direitos autorais.</p>
-            </>
-          )}
+          {freeError && <p className="inline-error" role="status">{freeError}</p>}
+          {freeResults.length === 0
+            ? <p className="hint">Nada com esse texto no catálogo pronto. Tente piano, blues ou guitar.</p>
+            : <FreeTrackList tracks={freeResults} playingId={playingId} onPlay={track => onPlayFree(freeResults, track)} />}
         </section>
-      )}
-      </details>
+
+        <aside className="verify-column" aria-labelledby="soundcloud-title">
+          <h2 id="soundcloud-title">Conferir no SoundCloud</h2>
+          <p className="hint">Traz só metadados, não o áudio. Serve para conferir letra e créditos e, se quiser, salvar o título no catálogo da API.</p>
+          <form className="search-form" onSubmit={event => void search(event)}>
+            <label className="sr-only" htmlFor="search-query">Pesquisar música ou artista no SoundCloud</label>
+            <input id="search-query" maxLength={120} value={query} onChange={event => setQuery(event.target.value)} placeholder="Título ou artista" />
+            <button type="submit" disabled={searching || !query.trim()}>{searching ? "Buscando…" : "Buscar"}</button>
+          </form>
+          {error && <p className="inline-error" role="status">{error}</p>}
+          {tracks.length > 0 && (
+            <ul className="discovery-list">
+              {tracks.map(track => (
+                <li key={track.id}>
+                  <button type="button" className={selected?.id === track.id ? "discovery-row current" : "discovery-row"} aria-pressed={selected?.id === track.id} onClick={() => void verify(track)}>
+                    <Cover label={track.title} artworkUrl={track.artworkUrl} />
+                    <span className="catalog-title"><strong>{track.title}</strong><small>{track.artist} · {formatTime(track.durationMillis / 1000)}</small></span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {selected && (
+            <section className="verify-panel" aria-live="polite" aria-labelledby="verify-title">
+              <div className="section-head">
+                <div>
+                  <h3 id="verify-title">{selected.title}</h3>
+                  <p className="hint">{selected.artist}</p>
+                </div>
+                <button type="button" className="icon-button" aria-label="Fechar conferência" onClick={() => { setSelected(null); setVerification(null); }}>
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              {verifying && <p className="busy">Conferindo letra e metadados…</p>}
+              {verification && <VerificationDetails verification={verification} showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(show => !show)} />}
+              <div className="pill-row">
+                <button type="button" className="pill primary" onClick={() => void save(selected)} disabled={savedIds.includes(selected.id)}>
+                  {savedIds.includes(selected.id) ? "Salva no catálogo" : "Salvar no catálogo"}
+                </button>
+                <a className="pill" href={selected.permalinkUrl} target="_blank" rel="noreferrer">
+                  <Icon name="external" size={18} />Abrir original
+                </a>
+              </div>
+            </section>
+          )}
+        </aside>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Resultado da conferência LRCLIB + MusicBrainz.
+ * Regra de negócio: correspondência aproximada (duração ou título diferentes)
+ * nunca é apresentada como confirmação; o aviso fica sempre visível nesse caso.
+ */
+function VerificationDetails({ verification, showLyrics, onToggleLyrics }: { verification: Verification; showLyrics: boolean; onToggleLyrics: () => void }) {
+  const lyrics = verification.lyrics;
+  const approximate = lyrics?.matchType === "approximate";
+  return (
+    <>
+      <dl className="verify-facts">
+        <div>
+          <dt>Letra (LRCLIB)</dt>
+          <dd>
+            {lyrics
+              ? <span className={approximate ? "badge approx" : "badge exact"}>{approximate ? "≈ aproximada" : "Igual"}</span>
+              : <span className="badge">Não encontrada</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>MusicBrainz</dt>
+          <dd>{verification.recordings.length} {verification.recordings.length === 1 ? "registro" : "registros"}</dd>
+        </div>
+      </dl>
+      {lyrics && <p className="hint">{lyrics.message}</p>}
+      {approximate && <p className="warn-box">Correspondência aproximada não é confirmação. Confira título, artista e duração antes de salvar.</p>}
+      {verification.warnings.map(warning => <p className="inline-error" key={warning}>{warning}</p>)}
+      {lyrics?.plainLyrics && (
+        <>
+          <button type="button" className="text-button" aria-expanded={showLyrics} onClick={onToggleLyrics}>{showLyrics ? "Ocultar letra" : "Ver letra"}</button>
+          {showLyrics && <pre className="lyrics">{lyrics.plainLyrics}</pre>}
+        </>
+      )}
+      <p className="hint">A conferência não certifica autoria nem direitos autorais.</p>
+    </>
   );
 }
 
@@ -879,43 +1060,113 @@ function TrackTable({ title, tracks, audioByCatalog, playlists, currentCatalogId
   );
 }
 
-function PlaylistView({ playlist, audioByCatalog, playlists, currentCatalogId, onPlayAll, onPlay, onAttach, onFavorite, onRemove, onDelete, onAddToPlaylist }: {
+/**
+ * Tela de uma playlist da API: cabeçalho com mosaico de capas, ações e faixas.
+ *
+ * As faixas vêm do catálogo da API, que guarda só metadados. Uma faixa toca
+ * aqui apenas quando há áudio anexado neste navegador (IndexedDB); por isso a
+ * coluna de origem diz "Neste navegador" ou "API · sem áudio".
+ */
+function PlaylistView({ playlist, catalog, audioByCatalog, currentCatalogId, onPlayAll, onShuffle, onPlay, onAttach, onFavorite, onRemove, onDelete, onAdd }: {
   playlist: Playlist | null;
+  catalog: CatalogTrack[];
   audioByCatalog: Map<string, LocalAudio>;
-  playlists: PlaylistSummary[];
   currentCatalogId?: string;
   onPlayAll: () => void;
+  onShuffle: () => void;
   onPlay: (trackId: string) => void;
   onAttach: (track: CatalogTrack) => void;
   onFavorite: (track: CatalogTrack) => void;
   onRemove: (trackId: string) => void;
   onDelete: () => void;
-  onAddToPlaylist: (playlistId: number, trackId: string) => void;
+  onAdd: (trackId: string) => void;
 }) {
   if (!playlist) return <p className="busy">Carregando playlist…</p>;
+  const inPlaylist = new Set(playlist.tracks.map(track => track.id));
+  const candidates = catalog.filter(track => !inPlaylist.has(track.id));
+  const playableHere = playlist.tracks.filter(track => audioByCatalog.has(track.id)).length;
+  const totalMinutes = Math.round(playlist.tracks.reduce((sum, track) => sum + track.durationSeconds, 0) / 60);
+  const mosaic = playlist.tracks.slice(0, 4);
+
   return (
     <div className="view">
-      <div className="section-head">
-        <p className="hint">{playlist.trackCount} faixas</p>
-        <div className="card-actions">
-          <button className="primary" type="button" onClick={onPlayAll} disabled={playlist.tracks.length === 0}>Tocar</button>
-          <button type="button" onClick={onDelete}>Apagar playlist</button>
+      <header className="playlist-head">
+        <div className="mosaic" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => {
+            const track = mosaic[index];
+            return <span key={index} style={{ background: track ? coverColor(track.title) : "var(--panel-2)" }}>{track?.title.slice(0, 1).toUpperCase()}</span>;
+          })}
         </div>
-      </div>
+        <div className="playlist-info">
+          <p className="eyebrow">Playlist</p>
+          <h2 className="playlist-title">{playlist.name}</h2>
+          <p className="hint">
+            {playlist.trackCount} {playlist.trackCount === 1 ? "faixa" : "faixas"} · {totalMinutes} min · {playableHere} {playableHere === 1 ? "toca" : "tocam"} aqui
+          </p>
+          <div className="pill-row">
+            <button className="pill primary" type="button" onClick={onPlayAll} disabled={playableHere === 0}><Icon name="play" size={18} />Tocar</button>
+            <button className="pill" type="button" onClick={onShuffle} disabled={playableHere === 0}><Icon name="shuffle" size={18} />Aleatório</button>
+            <button className="pill danger" type="button" onClick={onDelete}><Icon name="trash" size={18} />Excluir playlist</button>
+          </div>
+        </div>
+      </header>
+
       {playlist.missingTrackIds.length > 0 && <p className="inline-error">Há faixas nesta playlist que não existem mais no catálogo.</p>}
-      <TrackTable
-        title="Faixas"
-        tracks={playlist.tracks}
-        audioByCatalog={audioByCatalog}
-        playlists={playlists.filter(item => item.id !== playlist.id)}
-        currentCatalogId={currentCatalogId}
-        onPlay={onPlay}
-        onAttach={onAttach}
-        onFavorite={onFavorite}
-        onAddToPlaylist={onAddToPlaylist}
-        onDelete={track => onRemove(track.id)}
-        empty="Esta playlist ainda não tem faixas. Adicione pela biblioteca."
-      />
+
+      {playlist.tracks.length === 0 ? <p className="hint">Esta playlist ainda não tem faixas. Adicione abaixo.</p> : (
+        <ol className="track-rows">
+          {playlist.tracks.map((track, index) => {
+            const hasAudio = audioByCatalog.has(track.id);
+            const playing = currentCatalogId === track.id;
+            return (
+              <li key={track.id} className={playing ? "track-row current" : "track-row"}>
+                <span className="num" aria-hidden="true">{index + 1}</span>
+                <button
+                  type="button"
+                  className="row-cover"
+                  onClick={() => (hasAudio ? onPlay(track.id) : onAttach(track))}
+                  aria-label={hasAudio ? `${playing ? "Pausar" : "Tocar"} ${track.title}` : `Anexar áudio para ${track.title}`}
+                >
+                  <Cover label={track.title} />
+                  <span className="row-cover-icon"><Icon name={hasAudio ? (playing ? "pause" : "play") : "upload"} size={18} /></span>
+                </button>
+                <span className="catalog-title"><strong>{track.title}</strong><small>{track.artist}</small></span>
+                <span className={hasAudio ? "origin" : "origin muted"}>{hasAudio ? "Neste navegador" : "API · sem áudio"}</span>
+                <span className="meta time">{track.duration}</span>
+                <span className="row-actions">
+                  <button type="button" className="icon-button" aria-pressed={track.favorite} aria-label={track.favorite ? `Desfavoritar ${track.title}` : `Favoritar ${track.title}`} onClick={() => onFavorite(track)}>
+                    <Icon name="heart" filled={track.favorite} size={18} />
+                  </button>
+                  <button type="button" className="icon-button" aria-label={`Tirar ${track.title} da playlist`} onClick={() => onRemove(track.id)}>
+                    <Icon name="close" size={18} />
+                  </button>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      <section aria-labelledby="add-tracks-title">
+        <h2 id="add-tracks-title">Adicionar faixas</h2>
+        {candidates.length === 0
+          ? <p className="hint">Todas as faixas do catálogo da API já estão aqui. Cadastre novas na Biblioteca.</p>
+          : (
+            <ul className="track-rows compact">
+              {candidates.slice(0, 12).map(track => (
+                <li key={track.id} className="track-row">
+                  <Cover label={track.title} />
+                  <span className="catalog-title"><strong>{track.title}</strong><small>{track.artist}</small></span>
+                  <span className="meta time">{track.duration}</span>
+                  <button type="button" className="icon-button" aria-label={`Adicionar ${track.title} à playlist`} onClick={() => onAdd(track.id)}>
+                    <Icon name="plus" size={18} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        {candidates.length > 12 && <p className="hint">Mostrando 12 de {candidates.length}. As demais estão na Biblioteca.</p>}
+      </section>
     </div>
   );
 }
@@ -930,29 +1181,32 @@ function PlayerBar({ catalog, queueOpen, onToggleQueue, onFavorite }: {
   const track = player.current;
   const catalogTrack = track?.catalogId ? catalog.find(item => item.id === track.catalogId) : undefined;
   const duration = player.duration || track?.durationSeconds || 0;
-  const repeatLabel = player.repeat === "off" ? "Repetir desligado" : player.repeat === "all" ? "Repetir fila" : "Repetir faixa";
+  // O rótulo diz o estado atual; o clique avança desligado → fila → faixa.
+  const repeatLabel = player.repeat === "off" ? "Repetir: desligado" : player.repeat === "all" ? "Repetir: fila" : "Repetir: faixa";
 
   return (
     <footer className="player" aria-label="Player">
       <div className="now">
-        {track ? <Cover label={track.title} /> : <span className="cover generated" aria-hidden="true">♪</span>}
+        {track ? <Cover label={track.title} /> : <span className="cover generated empty" aria-hidden="true"><Icon name="music" /></span>}
         <div>
           <strong>{track?.title ?? "Nada tocando"}</strong>
-          <span>{track?.artist ?? "Importe um áudio para começar"}</span>
+          <span>{track?.artist ?? "Escolha uma faixa do catálogo"}</span>
         </div>
         {catalogTrack && (
-          <button type="button" aria-pressed={catalogTrack.favorite} aria-label={catalogTrack.favorite ? "Desfavoritar faixa atual" : "Favoritar faixa atual"} onClick={() => onFavorite(catalogTrack)}>
-            {catalogTrack.favorite ? "♥" : "♡"}
+          <button type="button" className="icon-button fav" aria-pressed={catalogTrack.favorite} aria-label={catalogTrack.favorite ? "Desfavoritar faixa atual" : "Favoritar faixa atual"} onClick={() => onFavorite(catalogTrack)}>
+            <Icon name="heart" filled={catalogTrack.favorite} />
           </button>
         )}
       </div>
       <div className="transport">
         <div className="transport-buttons">
-          <button type="button" aria-pressed={player.shuffle} onClick={player.toggleShuffle}>Aleatório</button>
-          <button type="button" onClick={player.previous} disabled={!track} aria-label="Faixa anterior">Anterior</button>
-          <button type="button" className="play" onClick={player.toggle} disabled={!track} aria-label={player.playing ? "Pausar" : "Tocar"}>{player.playing ? "Pausa" : "Tocar"}</button>
-          <button type="button" onClick={player.next} disabled={!track} aria-label="Próxima faixa">Próxima</button>
-          <button type="button" aria-pressed={player.repeat !== "off"} onClick={player.cycleRepeat}>{repeatLabel}</button>
+          <button type="button" className="icon-button toggle" aria-pressed={player.shuffle} aria-label="Aleatório" onClick={player.toggleShuffle}><Icon name="shuffle" /></button>
+          <button type="button" className="icon-button" onClick={player.previous} disabled={!track} aria-label="Faixa anterior"><Icon name="previous" /></button>
+          <button type="button" className="play" onClick={player.toggle} disabled={!track} aria-label={player.playing ? "Pausar" : "Tocar"}><Icon name={player.playing ? "pause" : "play"} size={22} /></button>
+          <button type="button" className="icon-button" onClick={player.next} disabled={!track} aria-label="Próxima faixa"><Icon name="next" /></button>
+          <button type="button" className="icon-button toggle" aria-pressed={player.repeat !== "off"} aria-label={repeatLabel} title={repeatLabel} onClick={player.cycleRepeat}>
+            <Icon name={player.repeat === "one" ? "repeat-one" : "repeat"} />
+          </button>
         </div>
         <div className="seek">
           <span>{formatTime(player.currentTime)}</span>
@@ -971,10 +1225,11 @@ function PlayerBar({ catalog, queueOpen, onToggleQueue, onFavorite }: {
       </div>
       <div className="volume">
         <label>
-          Volume
-          <input aria-label="Volume" type="range" min={0} max={1} step={0.01} value={player.volume} onChange={event => player.setVolume(Number(event.target.value))} />
+          <Icon name="volume" />
+          <span className="sr-only">Volume</span>
+          <input type="range" min={0} max={1} step={0.01} value={player.volume} onChange={event => player.setVolume(Number(event.target.value))} />
         </label>
-        <button type="button" aria-pressed={queueOpen} onClick={onToggleQueue}>Fila</button>
+        <button type="button" className="icon-button toggle" aria-pressed={queueOpen} aria-label="Fila de reprodução" onClick={onToggleQueue}><Icon name="queue" /></button>
       </div>
     </footer>
   );
