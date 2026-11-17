@@ -33,6 +33,9 @@ Na raiz do repositório, execute:
 mvn clean verify
 ```
 
+<!-- (https://drive.google.com/file/d/1cG0L1miFVUYr_ZuQnQTAEL2JCHxA-sGy/view?usp=drive_link) -->
+
+
 O comando compila os fontes e executa os testes automatizados.
 
 No Visual Studio Code, abra a pasta do projeto e use **Run and Debug** com a configuração `Main (terminal)`. É preciso o Extension Pack for Java. No IntelliJ, abra o `pom.xml` ou o projeto e execute a configuração `Main`.
