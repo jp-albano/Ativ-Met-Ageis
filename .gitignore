@@ -44,3 +44,6 @@ frontend/next-env.d.ts
 
 ### Maven ###
 target/
+
+### Músicas locais para testar o player (direitos autorais; nunca versionar) ###
+frontend/public/local-music/

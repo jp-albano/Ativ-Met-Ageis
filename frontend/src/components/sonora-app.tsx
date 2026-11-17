@@ -958,6 +958,7 @@ function LibraryView({ localTracks, catalog, playlists, audioByCatalog, currentI
         Filtrar biblioteca
         <input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Título ou artista" />
       </label>
+      <LocalMusicFolder />
       {onlyLocal.length > 0 && (
         <section>
           <h2>Arquivos só neste navegador</h2>
@@ -1232,5 +1233,56 @@ function PlayerBar({ catalog, queueOpen, onToggleQueue, onFavorite }: {
         <button type="button" className="icon-button toggle" aria-pressed={queueOpen} aria-label="Fila de reprodução" onClick={onToggleQueue}><Icon name="queue" /></button>
       </div>
     </footer>
+  );
+}
+
+/** Faixa de public/local-music, descrita pelo index.json que `npm run musicas` gera. */
+type FolderTrack = { file: string; artist: string; title: string };
+
+/**
+ * Músicas da pasta public/local-music, só para testar o player.
+ * A pasta é ignorada pelo Git (direitos autorais); sem o index.json a seção não aparece.
+ */
+function LocalMusicFolder() {
+  const player = usePlayer();
+  const [tracks, setTracks] = useState<FolderTrack[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/local-music/index.json")
+      .then(response => (response.ok ? response.json() : []))
+      .then((data: FolderTrack[]) => { if (!cancelled) setTracks(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setTracks([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (tracks.length === 0) return null;
+  const queue: PlayableTrack[] = tracks.map(track => ({ audioId: `pasta:${track.file}`, title: track.title, artist: track.artist, durationSeconds: 0, streamUrl: track.file }));
+
+  function play(start: number) {
+    if (player.current?.audioId === queue[start].audioId) player.toggle();
+    else player.playQueue(queue, start);
+  }
+
+  return (
+    <section>
+      <div className="section-head">
+        <div>
+          <h2>Pasta de músicas locais</h2>
+          <p className="hint">{tracks.length} faixas de teste em public/local-music.</p>
+        </div>
+        <button className="primary" type="button" onClick={() => play(0)}>Tocar tudo</button>
+      </div>
+      <ul className="plain-list">
+        {queue.map((track, position) => (
+          <li key={track.audioId}>
+            <button type="button" className={player.current?.audioId === track.audioId ? "row-play current" : "row-play"} onClick={() => play(position)} aria-label={`Tocar ${track.title}`}>
+              <Cover label={track.title} />
+              <span><strong>{track.title}</strong><small>{track.artist}</small></span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
