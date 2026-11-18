@@ -1,13 +1,17 @@
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
  * Mantém o catálogo de faixas disponível para a aplicação.
- * O catálogo inicial é de demonstração; os caminhos de áudio/capa não são validados aqui.
+ * O catálogo inicial é de demonstração. Os caminhos são referências locais: devem ser
+ * não vazios, mas a existência dos arquivos não é exigida para cadastrar uma faixa.
  */
 public class CatalogService {
 
@@ -15,7 +19,24 @@ public class CatalogService {
 
     /** Inicializa o catálogo em memória com algumas faixas de exemplo. */
     public CatalogService() {
-        this.tracks = new ArrayList<>(initialCatalog());
+        this(initialCatalog());
+    }
+
+    /**
+     * Inicializa um catálogo com a coleção informada, preservando a ordem recebida.
+     * A coleção é copiada e validada para impedir nulos ou IDs repetidos.
+     */
+    public CatalogService(Collection<Track> initialTracks) {
+        Objects.requireNonNull(initialTracks, "initialTracks");
+        this.tracks = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        for (Track track : initialTracks) {
+            Objects.requireNonNull(track, "initialTracks must not contain null");
+            if (!ids.add(track.id())) {
+                throw new IllegalArgumentException("Duplicate track id: " + track.id());
+            }
+            tracks.add(track);
+        }
     }
 
     /** Cria a lista inicial imutável de exemplos que será copiada para a lista interna. */

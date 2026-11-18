@@ -23,8 +23,8 @@ import java.util.function.LongSupplier;
  * Controla a reprodução de uma faixa no terminal.
  *
  * <p>Quando o arquivo existe e o mixer do Java consegue abri-lo, a posição vem do
- * {@link Clip}. O catálogo de demonstração aponta para MP3 que não estão no
- * repositório. Um MP3 local é decodificado e tocado. Uma faixa vinda da pesquisa
+ * {@link Clip}. O catálogo inicial inclui MP3 instrumentais de demonstração na pasta
+ * {@code audio/}. Um MP3 local é decodificado e tocado. Uma faixa vinda da pesquisa
  * pede o stream HTTPS autorizado pelo SoundCloud e toca sem gravar o arquivo.
  * Se nada disso existir, o player gera um tom PCM com a duração da faixa. Se não
  * houver dispositivo de áudio, o avanço da posição usa o relógio injetado.</p>

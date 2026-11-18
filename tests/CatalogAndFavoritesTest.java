@@ -1,6 +1,7 @@
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -48,5 +49,60 @@ class CatalogAndFavoritesTest {
         assertEquals("03:14", primeira.formattedDuration());
         assertEquals(primeira, segunda);
         assertEquals(primeira.hashCode(), segunda.hashCode());
+    }
+
+    @Test
+    void rejeitaCamposObrigatoriosInvalidosEDuracaoNaoPositiva() {
+        assertThrows(NullPointerException.class,
+                () -> new Track(null, "Título", "Artista", 1, null, new File("a.mp3")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Track("id", "  ", "Artista", 1, null, new File("a.mp3")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Track("id", "Título", "\t", 1, null, new File("a.mp3")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Track("id", "Título", "Artista", 0, null, new File("a.mp3")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Track("id", "Título", "Artista", -1, null, new File("a.mp3")));
+    }
+
+    @Test
+    void normalizaTextosEValidaReferenciasSemExigirArquivosExistentes() {
+        Track faixa = new Track(" id ", " Título ", " Artista ", 1,
+                new File("covers/inexistente.jpg"), new File("audio/inexistente.mp3"));
+
+        assertEquals("id", faixa.id());
+        assertEquals("Título", faixa.title());
+        assertEquals("Artista", faixa.artist());
+        assertFalse(faixa.audioFile().exists());
+        assertFalse(faixa.coverFile().exists());
+        assertThrows(IllegalArgumentException.class,
+                () -> new Track("id", "Título", "Artista", 1, null, new File("  ")));
+    }
+
+    @Test
+    void catalogoVazioPreservaOrdemEIsolaColecaoExposta() {
+        CatalogService catalog = new CatalogService(List.of());
+
+        assertTrue(catalog.getAllTracks().isEmpty());
+        assertEquals(0, catalog.getTrackCount());
+        assertTrue(catalog.findById("ausente").isEmpty());
+        assertThrows(UnsupportedOperationException.class,
+                () -> catalog.getAllTracks().add(new Track("id", "Título", "Artista", 1,
+                        null, new File("a.mp3"))));
+    }
+
+    @Test
+    void catalogoInicialListaTodasNaOrdemEIdAusenteNaoAlteraEstado() {
+        CatalogService catalog = new CatalogService();
+        List<Track> antes = catalog.getAllTracks();
+
+        assertTrue(antes.stream().allMatch(track -> track.audioFile().isFile()),
+                "o catálogo inicial deve apontar para arquivos de áudio existentes");
+        assertEquals(List.of("t-001", "t-002", "t-003", "t-004", "t-005", "t-006",
+                "t-007", "t-008"), antes.stream().map(Track::id).toList());
+        assertTrue(catalog.findById("nao-existe").isEmpty());
+        assertEquals(antes, catalog.getAllTracks());
+        assertThrows(IllegalArgumentException.class,
+                () -> new CatalogService(List.of(antes.get(0), antes.get(0))));
     }
 }

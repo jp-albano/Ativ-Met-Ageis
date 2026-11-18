@@ -31,16 +31,31 @@ public record Track(
 
     /** Valida os campos obrigatórios no momento da criação do objeto. */
     public Track {
-        Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(title, "title");
-        Objects.requireNonNull(artist, "artist");
+        id = requireText(id, "id");
+        title = requireText(title, "title");
+        artist = requireText(artist, "artist");
         Objects.requireNonNull(audioFile, "audioFile");
-        if (durationSeconds < 0) {
-            throw new IllegalArgumentException("durationSeconds must be >= 0");
+        if (audioFile.getPath().isBlank()) {
+            throw new IllegalArgumentException("audioFile must have a path");
+        }
+        if (coverFile != null && coverFile.getPath().isBlank()) {
+            throw new IllegalArgumentException("coverFile must have a path when provided");
+        }
+        if (durationSeconds <= 0) {
+            throw new IllegalArgumentException("durationSeconds must be > 0");
         }
         if (origemId != null && origemId.isBlank()) {
             origemId = null;
         }
+    }
+
+    private static String requireText(String value, String field) {
+        Objects.requireNonNull(value, field);
+        String normalized = value.strip();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return normalized;
     }
 
     /** Converte segundos para o formato de exibição minutos:segundos (por exemplo, 03:14). */

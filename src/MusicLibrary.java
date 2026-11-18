@@ -63,8 +63,8 @@ public final class MusicLibrary {
     public synchronized TrackView addTrack(String title, String artist, int durationSeconds) {
         String cleanTitle = requireText(title, "título", MAX_TITLE_LENGTH);
         String cleanArtist = requireText(artist, "artista", MAX_ARTIST_LENGTH);
-        if (durationSeconds < 0 || durationSeconds > MAX_DURATION_SECONDS) {
-            throw new IllegalArgumentException("A duração deve ficar entre 0 e "
+        if (durationSeconds <= 0 || durationSeconds > MAX_DURATION_SECONDS) {
+            throw new IllegalArgumentException("A duração deve ficar entre 1 e "
                     + MAX_DURATION_SECONDS + " segundos.");
         }
         Track track = new Track(nextTrackId(), cleanTitle, cleanArtist, durationSeconds,
