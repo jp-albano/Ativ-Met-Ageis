@@ -59,7 +59,7 @@ public class Playlist {
         if (faixaId == null || faixaId.isBlank()) {
             throw new IllegalArgumentException("O ID da faixa não pode ser vazio.");
         }
-        if (faixaIds.contains(faixaId)) {
+        if (faixaIds.stream().anyMatch(id -> id.equalsIgnoreCase(faixaId))) {
             return false; // Evita que a mesma faixa apareça duas vezes.
         }
         return faixaIds.add(faixaId);
